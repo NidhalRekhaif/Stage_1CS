@@ -1,15 +1,14 @@
-from sqlalchemy import create_engine,Column,Integer,String,MetaData,Table
-from sqlalchemy.orm import sessionmaker,declarative_base
-from fastapi import FastAPI
-app = FastAPI()
-DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False,autoflush=False,engine=engine)
+from sqlmodel import create_engine,SQLModel,Session,text
+from fastapi import Depends
+from typing import Annotated
+DATABASE_URL = 'sqlite:///example.db'
+engine = create_engine(DATABASE_URL,echo=True,connect_args={'check_same_thread':False})
+def init_db():
+    SQLModel.metadata.create_all(engine)
+    with engine.connect() as connection:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
 
-Base = declarative_base()
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    email = Column(String, unique=True, index=True)
-Base.metadata.create_all(bind=engine)
+async def get_session():
+    with Session(engine) as session:
+        yield session
+SessionDep = Annotated[Session, Depends(get_session)]
