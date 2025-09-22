@@ -4,7 +4,6 @@ from typing import Annotated
 DATABASE_URL = 'sqlite:///example.db'
 engine = create_engine(DATABASE_URL,echo=True,connect_args={'check_same_thread':False})
 def init_db():
-    SQLModel.metadata.create_all(engine)
     with engine.connect() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))
 
