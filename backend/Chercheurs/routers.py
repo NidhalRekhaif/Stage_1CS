@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from database import SessionDep
-from .schemas import Chercheur,LaboMake,Labo,ChercheurUpdate
+from .schemas import Chercheur,LaboMake,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate
 from sqlmodel import select
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException,Query,Response,Path
@@ -8,10 +8,6 @@ from starlette import status
 chercheurs_router = APIRouter()
 
 
-@chercheurs_router.get("/",response_model=list[Chercheur])
-def get_chercheurs(session:SessionDep):
-    result = session.exec(select(Chercheur))
-    return result
 
 @chercheurs_router.get("/labos",response_model=LaboMake | list[LaboMake])
 def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
@@ -24,6 +20,9 @@ def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,desc
     else:
         results = session.exec(select(Labo)).all()
         return results
+    
+
+
 @chercheurs_router.post("/labos")
 def add_labo(labo:LaboMake,session:SessionDep):
     try:
@@ -35,7 +34,26 @@ def add_labo(labo:LaboMake,session:SessionDep):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e)
     return JSONResponse(content={'message':'sucess'},status_code=status.HTTP_201_CREATED)
 
-@chercheurs_router.patch("/{chercheur_id}",response_model=Chercheur)
+
+
+@chercheurs_router.get("/",response_model=list[Chercheur])
+def get_chercheurs(session:SessionDep):
+    result = session.exec(select(Chercheur))
+    return result
+
+
+
+@chercheurs_router.post("/", response_model=Chercheur)
+def create_chercheur(chercheur: ChercheurCreate, session: SessionDep):
+    db_chercheur = Chercheur.model_validate(chercheur)
+    session.add(db_chercheur)
+    session.commit()
+    session.refresh(db_chercheur)
+    return db_chercheur
+
+
+
+@chercheurs_router.patch("/{chercheur_id}",response_model=ChercheurBase)
 def update_chercheur(session:SessionDep,chercheur:ChercheurUpdate,chercheur_id : int = Path(...,ge=0)):
     result = session.get(Chercheur,chercheur_id)
     if result:
@@ -47,3 +65,13 @@ def update_chercheur(session:SessionDep,chercheur:ChercheurUpdate,chercheur_id :
         return result
     else:
         raise HTTPException(detail="Chercheur introuvable.",status_code=status.HTTP_404_NOT_FOUND)
+    
+
+@chercheurs_router.delete("/{chercheur_id}",status_code=status.HTTP_204_NO_CONTENT)
+def delete_chercheur(session : SessionDep,chercheur_id : int = Path(...)):
+    result = session.get(Chercheur,chercheur_id)
+    if not result:
+        raise HTTPException(detail="Chercheur introuvable.",status_code=status.HTTP_404_NOT_FOUND)
+    session.delete(result)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
