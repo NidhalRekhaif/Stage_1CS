@@ -51,7 +51,7 @@ class ChercheurBase(SQLModel):
     i_10_index : int = Field(default=0,description="i-10 index du chercheur")
     @property
     def full_name(self):
-        return f"{self.nom} {self.prenom}"
+        return f"{self.prenom} {self.nom}"
 
 
     @field_validator("telephone")
@@ -91,7 +91,7 @@ class ChercheurBase(SQLModel):
 
 class Chercheur(ChercheurBase,table=True):
     id : int | None = Field(default=None,primary_key=True,ge=0)
-    labo_id : int | None = Field(default=None,foreign_key="labo.id")
+    labo_id : int | None = Field(default=None,foreign_key="labo.id",ondelete='SET NULL')
     labo:Labo = Relationship(back_populates="chercheurs")
 
     
@@ -117,6 +117,9 @@ class ChercheurUpdate(ChercheurBase):
 class ChercheurCreate(ChercheurBase):
     labo_id : int | None = Field(default=None)
 
+
+class ChercheurRead(ChercheurBase):
+    labo:LaboMake | None
 # class DummyBase(SQLModel):
 #     name : str | None = None
 # class Dummy(DummyBase,table=True):
