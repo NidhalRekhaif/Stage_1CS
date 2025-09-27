@@ -3,7 +3,8 @@ import pandas as pd
 from sqlmodel import create_engine,text,Session
 from database import DATABASE_URL
 from .schemas import Chercheur
-SOURCE_URL = "Lists-chercheurs/Chercheurs-LCSI - Sheet1.csv"
+from .orcid_s import get_dblp_url_from_name
+SOURCE_URL = "Lists-chercheurs/test.csv"
 def main(csv_path):
     engine = create_engine(DATABASE_URL,echo=True,connect_args={'check_same_thread':False})
     with engine.connect() as connection:
@@ -21,9 +22,9 @@ def main(csv_path):
                     nom=row['nom'],
                     prenom=row['prenom'], 
                     email=row['email'],
-                    grade=row['grade']
+                    grade=row['grade'],
                 )
-                
+                chercheur.dblp_url = get_dblp_url_from_name(chercheur.full_name)
                 session.add(chercheur)
                 successful += 1
                 

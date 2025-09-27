@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 from database import SessionDep
-from .schemas import Chercheur,LaboMake,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate
+from .schemas import Chercheur,LaboMake,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate,ChercheurRead
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException,Query,Response,Path
 from starlette import status
@@ -14,7 +15,7 @@ def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,desc
     if labo_name:
         result = session.exec(select(Labo).where(Labo.nom == labo_name)).first()
         if result:
-            return JSONResponse(content=LaboMake(**result.model_dump()).model_dump(),status_code=status.HTTP_200_OK)
+            return result
         else:
             raise HTTPException(detail=f"Labo avec le nom {labo_name} n'existe pas",status_code=status.HTTP_404_NOT_FOUND)
     else:
@@ -36,7 +37,7 @@ def add_labo(labo:LaboMake,session:SessionDep):
 
 
 
-@chercheurs_router.get("/",response_model=list[Chercheur])
+@chercheurs_router.get("/",response_model=list[ChercheurRead])
 def get_chercheurs(session:SessionDep):
     result = session.exec(select(Chercheur))
     return result
