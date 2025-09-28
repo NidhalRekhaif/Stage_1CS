@@ -16,14 +16,10 @@ class GradeEnum(str, Enum):
     PROFESSEUR = "Professeur"
     Unknown = "Inconnu"
 
-
-class Labo(SQLModel,table=True):
-    id: int = Field(primary_key=True,ge=0)
+class LaboBase(SQLModel):
     nom : str = Field(...,unique=True)
     description : str | None = Field(default=None)
     siteweb : str | None = Field(default=None)
-    chercheurs:list["Chercheur"] = Relationship(back_populates="labo")
-
 
     @field_validator('nom')
     @classmethod
@@ -31,10 +27,27 @@ class Labo(SQLModel,table=True):
         return value.upper() if value else value
     
 
-class LaboMake(SQLModel):
-    nom : str
-    description : str | None = Field(default=None)
-    siteweb : str | None = Field(default=None)
+    @field_validator('siteweb')
+    @classmethod
+    def validate_urls(cls, value):
+        if value is None:
+            return value
+        HttpUrl(value)  
+        return value
+
+class Labo(LaboBase,table=True):
+    id: int = Field(primary_key=True,ge=0)
+    chercheurs:list["Chercheur"] = Relationship(back_populates="labo")
+
+
+
+
+
+
+class LaboUpdate(LaboBase):
+    nom : str | None = None
+    description : str | None = None
+    siteweb : str | None = None
 
 
 
@@ -84,8 +97,8 @@ class ChercheurBase(SQLModel):
 
     @field_validator('prenom')
     @classmethod
-    def title_prenom(cls, value: str) -> str:
-        return value.title() if value else value
+    def upper_prenom(cls, value: str) -> str:
+        return value.upper() if value else value
     
 
 
@@ -119,7 +132,8 @@ class ChercheurCreate(ChercheurBase):
 
 
 class ChercheurRead(ChercheurBase):
-    labo:LaboMake | None
+    id : int | None
+    labo:LaboBase | None
 # class DummyBase(SQLModel):
 #     name : str | None = None
 # class Dummy(DummyBase,table=True):
