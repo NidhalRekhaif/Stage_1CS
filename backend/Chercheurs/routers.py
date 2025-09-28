@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from database import SessionDep
-from .schemas import Chercheur,LaboMake,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate,ChercheurRead
+from .schemas import Chercheur,LaboBase,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate,ChercheurRead,LaboUpdate
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from fastapi.responses import JSONResponse
@@ -10,7 +10,7 @@ chercheurs_router = APIRouter()
 
 
 
-@chercheurs_router.get("/labos",response_model=LaboMake | list[LaboMake])
+@chercheurs_router.get("/labos",response_model=Labo | list[Labo])
 def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
     if labo_name:
         result = session.exec(select(Labo).where(Labo.nom == labo_name)).first()
@@ -25,7 +25,7 @@ def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,desc
 
 
 @chercheurs_router.post("/labos")
-def add_labo(labo:LaboMake,session:SessionDep):
+def add_labo(labo:LaboBase,session:SessionDep):
     try:
         db_labo = Labo(**labo.model_dump(exclude_unset=True))
         session.add(db_labo)
@@ -36,10 +36,33 @@ def add_labo(labo:LaboMake,session:SessionDep):
     return JSONResponse(content={'message':'sucess'},status_code=status.HTTP_201_CREATED)
 
 
+@chercheurs_router.patch("/labos{labo_id}",response_model=Labo)
+def patch_labo(session : SessionDep,labo : LaboUpdate,labo_id: int = Path(...,description="Le id de labo à modifier",example=1)):
+    labo_db = session.get(Labo,labo_id)
+    if not labo_db:
+        raise HTTPException(detail="Labo introuvable",status_code=status.HTTP_404_NOT_FOUND)
+    labo_data = labo.model_dump(exclude_unset=True)
+    labo_db.sqlmodel_update(labo_data)
+    session.add(labo_db)
+    session.commit()
+    session.refresh(labo_db)
+    return labo_db
 
-@chercheurs_router.get("/",response_model=list[ChercheurRead])
+
+@chercheurs_router.delete("/labos{labo_id}",status_code=status.HTTP_204_NO_CONTENT)
+def delete_labo(session:SessionDep,labo_id : int = Path(...)):
+    labo_db = session.get(Labo,labo_id)
+    if not labo_db:
+        raise HTTPException(detail="Laboratoire introuvable.",status_code=status.HTTP_404_NOT_FOUND)
+    session.delete(labo_db)
+    session.commit()
+
+
+@chercheurs_router.get("/",response_model=list[ChercheurRead] )
 def get_chercheurs(session:SessionDep):
     result = session.exec(select(Chercheur))
+    if not result:
+        raise HTTPException(detail="Il n'y a pas de chercheurs à ce moment",status_code=status.HTTP_400_BAD_REQUEST)
     return result
 
 

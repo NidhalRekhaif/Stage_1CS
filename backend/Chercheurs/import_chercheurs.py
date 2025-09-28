@@ -4,13 +4,13 @@ from sqlmodel import create_engine,text,Session
 from database import DATABASE_URL
 from .schemas import Chercheur
 from .orcid_s import get_dblp_url_from_name
-SOURCE_URL = "Lists-chercheurs/test.csv"
-def main(csv_path):
+SOURCE_URL = "Lists-chercheurs/List-chercheur-lcsi.csv"
+def main(csv_path,labo_id : int | None = None):
     engine = create_engine(DATABASE_URL,echo=True,connect_args={'check_same_thread':False})
     with engine.connect() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))
     df = pd.read_csv(csv_path, header=None)
-    df.columns = ['nom', 'prenom', 'email', 'grade']
+    df.columns = ['nom', 'prenom', 'email', 'grade','google_scholar_url']
     
     successful = 0
     failed = []
@@ -23,6 +23,8 @@ def main(csv_path):
                     prenom=row['prenom'], 
                     email=row['email'],
                     grade=row['grade'],
+                    google_scholar_url=row['google_scholar_url'],
+                    labo_id=labo_id
                 )
                 chercheur.dblp_url = get_dblp_url_from_name(chercheur.full_name)
                 session.add(chercheur)
