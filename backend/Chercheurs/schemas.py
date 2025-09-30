@@ -3,7 +3,7 @@ from pydantic import EmailStr,field_validator,HttpUrl
 from typing import Annotated,Literal,Optional
 import re
 from enum import Enum
-
+from Publications.liens_chercheur_pub import LienChercheurConference,LienChercheurRevue
 
 from enum import Enum
 
@@ -106,8 +106,8 @@ class Chercheur(ChercheurBase,table=True):
     id : int | None = Field(default=None,primary_key=True,ge=0)
     labo_id : int | None = Field(default=None,foreign_key="labo.id",ondelete='SET NULL')
     labo:Labo = Relationship(back_populates="chercheurs")
-
-    
+    conference_links : list[LienChercheurConference] = Relationship(back_populates="chercheur")
+    revue_links : list[LienChercheurRevue] = Relationship(back_populates="chercheur")
 
 
 
