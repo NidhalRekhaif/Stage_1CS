@@ -6,7 +6,9 @@ from sqlmodel import SQLModel
 from alembic import context
 from pathlib import Path
 import Chercheurs.schemas
-import Publications.schemas
+import Publications.revue_schemas
+import Publications.conference_schemas
+import Publications.liens_chercheur_pub
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
