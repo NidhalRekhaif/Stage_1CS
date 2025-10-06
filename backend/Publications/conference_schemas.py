@@ -14,8 +14,9 @@ class PublicationConferenceBase(SQLModel):
     doi : str | None  = Field(default=None,unique=True,index=True)
     annee_publication : int = Field(...,gt=1950)
     url : str | None = Field(default=None,description="Lien vers la publication s'il existe")
+    citations : int | None = Field(default=None)
     is_open_access : bool = False
-
+    
     @field_validator("url")
     @classmethod
     def url_validator(cls,value):
@@ -42,6 +43,13 @@ class ConferenceBase(SQLModel):
     nom : str 
     acronyme : str | None = None
 
+
+    @field_validator("acronyme","nom")
+    @classmethod
+    def upper_name_acronyme(cls,value):
+        if value is None:
+            return None
+        return value.upper()
 
 
 class Conference(ConferenceBase,table = True):

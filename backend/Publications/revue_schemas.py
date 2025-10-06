@@ -63,6 +63,12 @@ class RevueBase(SQLModel):
     e_issn : str | None = Field(default=None,unique=True,index=True)
 
 
+    @field_validator("issn","e_issn")
+    @classmethod
+    def transform_issn(cls,value : str | None):
+        if not value:
+            return None
+        return value.replace('-','')
 
 class Revue(RevueBase,table=True):
     id : int = Field(...,primary_key=True)

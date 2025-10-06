@@ -1,0 +1,72 @@
+{
+  "scimago": {
+    "1999":"Rankings/scimago/scimagojr 1999.csv",
+    "2000":"Rankings/scimago/scimagojr 2000.csv",
+    "2001":"Rankings/scimago/scimagojr 2001.csv",
+    "2002":"Rankings/scimago/scimagojr 2002.csv",
+    "2003":"Rankings/scimago/scimagojr 2003.csv",
+    "2004":"Rankings/scimago/scimagojr 2004.csv",
+    "2005":"Rankings/scimago/scimagojr 2005.csv",
+    "2006":"Rankings/scimago/scimagojr 2006.csv",
+    "2007":"Rankings/scimago/scimagojr 2007.csv",
+    "2008":"Rankings/scimago/scimagojr 2008.csv",
+    "2009":"Rankings/scimago/scimagojr 2009.csv",
+    "2010":"Rankings/scimago/scimagojr 2010.csv",
+    "2011":"Rankings/scimago/scimagojr 2011.csv",
+    "2012":"Rankings/scimago/scimagojr 2012.csv",
+    "2013":"Rankings/scimago/scimagojr 2013.csv",
+    "2014":"Rankings/scimago/scimagojr 2014.csv",
+    "2015":"Rankings/scimago/scimagojr 2015.csv",
+    "2016":"Rankings/scimago/scimagojr 2016.csv",
+    "2017":"Rankings/scimago/scimagojr 2017.csv",
+    "2018":"Rankings/scimago/scimagojr 2018.csv",
+    "2019":"Rankings/scimago/scimagojr 2019.csv",
+    "2020":"Rankings/scimago/scimagojr 2020.csv",
+    "2021":"Rankings/scimago/scimagojr 2021.csv",
+    "2022":"Rankings/scimago/scimagojr 2022.csv",
+    "2023":"Rankings/scimago/scimagojr 2023.csv",
+    "2024":"Rankings/scimago/scimagojr 2024.csv"
+
+  },
+  "dgrsdt": {
+    "2024":{
+            "A+":"Rankings/dgrsdt/2024/",
+            "A":"Rankings/dgrsdt/2024/",
+            "B":"Rankings/dgrsdt/2024/",
+            "PEDIATRICE":"Rankings/dgrsdt/2024/"
+    },
+    "2023":{
+            "A+":"Rankings/dgrsdt/2023/",
+            "A":"Rankings/dgrsdt/2023/",
+            "B":"Rankings/dgrsdt/2023/",
+            "PEDIATRICE":"Rankings/dgrsdt/2023/"
+    },
+    "2022":{
+            "A+":"Rankings/dgrsdt/2022/",
+            "A":"Rankings/dgrsdt/2022/",
+            "B":"Rankings/dgrsdt/2022/",
+            "PEDIATRICE":"Rankings/dgrsdt/2022/"
+    },
+    "2021":{ 
+            "A+":"Rankings/dgrsdt/2021/",
+            "A":"Rankings/dgrsdt/2021/",
+            "B":"Rankings/dgrsdt/2021/",
+            "PEDIATRICE":"Rankings/dgrsdt/2021/"
+    },
+    "2020":{
+            "A+":"Rankings/dgrsdt/2020/",
+            "A":"Rankings/dgrsdt/2020/",
+            "B":"Rankings/dgrsdt/2020/",
+            "PEDIATRICE":"Rankings/dgrsdt/2020/"
+    },
+    "2019":{
+            "A+":"Rankings/dgrsdt/2019/",
+            "A":"Rankings/dgrsdt/2019/",
+            "B":"Rankings/dgrsdt/2019/",
+            "PEDIATRICE":"Rankings/dgrsdt/2019/"
+    }
+  }
+}
+
+
+
