@@ -1,6 +1,8 @@
 from sqlmodel import SQLModel,Field,Relationship
 from pydantic import field_validator,HttpUrl
 from enum import Enum
+
+from .revue_schemas import ScimagoRanking
 from .liens_chercheur_pub import LienChercheurConference
 class CoreRanking(str,Enum):
     AA = "A*"
@@ -42,7 +44,7 @@ class PublicationConference(PublicationConferenceBase,table = True):
 class ConferenceBase(SQLModel):
     nom : str 
     acronyme : str | None = None
-
+    url : str | None = None
 
     @field_validator("acronyme","nom")
     @classmethod
@@ -50,6 +52,15 @@ class ConferenceBase(SQLModel):
         if value is None:
             return None
         return value.upper()
+    
+
+    @field_validator("url")
+    @classmethod
+    def url_validator(cls,value):
+        if value is None:
+            return None
+        HttpUrl(value)
+        return value
 
 
 class Conference(ConferenceBase,table = True):
@@ -62,6 +73,7 @@ class Conference(ConferenceBase,table = True):
 class ConferenceRankingBase(SQLModel):
     annee : int 
     core_ranking : CoreRanking | None = None
+    scimago_rank: ScimagoRanking | None = None
     is_scopus_indexed : bool | None = False
 
     @field_validator("annee")
