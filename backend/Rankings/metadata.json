@@ -65,6 +65,18 @@
             "B":"Rankings/dgrsdt/2019/",
             "PEDIATRICE":"Rankings/dgrsdt/2019/"
     }
+  },
+  "core":{
+        "2008":"Rankings/core/2008.csv",
+        "2010":"Rankings/core/2010.csv",
+        "2013":"Rankings/core/2013.csv",
+        "2014":"Rankings/core/2014.csv",
+        "2017":"Rankings/core/2017.csv",
+        "2018":"Rankings/core/2018.csv",
+        "2020":"Rankings/core/2020.csv",
+        "2021":"Rankings/core/2021.csv",
+        "2023":"Rankings/core/2023.csv"
+
   }
 }
 

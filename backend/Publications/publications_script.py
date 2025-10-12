@@ -99,6 +99,47 @@ def load_metadata():
 import pandas as pd
 import os
 
+
+
+
+def get_core_ranking(acronym:str | None,conference_name:str | None,year : int) -> str | None:
+    files = load_metadata()
+    years = [int(item) for item in list(files.get('core',{}.keys()))]
+    years.sort()
+
+    # Get all ranking years that are <= publication year
+    valid_years = [y for y in years if y <= int(year)]
+
+    # Choose the closest previous one, or the earliest available
+    if valid_years:
+        closest_core_year = max(valid_years)
+    else:
+        closest_core_year = years[0]
+    file_path = files['core'][str(closest_core_year)]
+    if not os.path.exists(file_path):
+        print(f"[WARN] Metadata lists {file_path}, but file not found.")
+        return None
+    try:
+        df = pd.read_csv(file_path,low_memory=False,delimiter=',',dtype=str)
+        df['normalized'] = df["Acronym"].apply(lambda x : x.strip().upper())
+        result = df[df['normalized'] == acronym.strip().upper()]
+
+        if result.empty:
+            print(f"[INFO] Conference '{acronym}' not found in {year}")
+
+        if result.empty and conference_name:
+            result = df[df['Title'].str.contains(conference_name, case=False, na=False)]
+        if result.empty:
+            print(f"[INFO] Conference '{conference_name}' not found in {year}") 
+            return None
+        row = result.iloc[0]
+        ranking_result = row['Rank']
+
+        return ranking_result
+    
+    except Exception as e:
+        pass
+
 def get_scimago_ranking(journal_name: str | None, issn_request: str | None, year: int) -> dict | None:
     """
     Get the Scimago ranking for a given journal and year.
@@ -126,6 +167,7 @@ def get_scimago_ranking(journal_name: str | None, issn_request: str | None, year
             full_name = full_name[:index].strip()
 
         print(journal_name)
+        is_scopus_index = None
         issn, e_issn, is_scopus_index = get_issn_from_openalex(venue_name=journal_name, full_name=full_name)
 
         if result.empty:
@@ -203,7 +245,7 @@ def get_metadata_from_openalex(doi: str | None,title : str | None) -> dict:
                 "oa_status": data.get("open_access", {}).get("oa_status",None),
                 "oa_url": data.get("open_access", {}).get("oa_url",None),
             },
-            "source": data.get("primary_location",{}).get("source",{}),
+            "primary_location": data.get("primary_location",{}),
             "authorships":data.get("authorships",{})
         }
         
@@ -274,7 +316,8 @@ def fetch_dblp_publications(dblp_url: str):
                     position = author.get("author_position")
                     break
         # --- Extract journal/source info safely ---
-        source = metadata.get('source', {}) or {}
+        primary_location = metadata.get('primary_location',{}) or {}
+        source = primary_location.get('source', {}) or {}
         revue = source.get('display_name', None)
 
         # Extract ISSN (OpenAlex may have issn_l or issn[])
@@ -289,13 +332,28 @@ def fetch_dblp_publications(dblp_url: str):
         oa_url = None
         ranking_data = None
 
+        revue_data = get_scimago_ranking(revue, issn_request, year)
         # --- If article, get ranking info ---
+        open_access = metadata.get("open_access", {})
+        oa_url = open_access.get("oa_url", None)
+        if not oa_url:
+            oa_url = url  # fallback
+        core_ranking = None
+        conference_name = revue or ''
+        acronym = ""
         if pub_type == 'article':
-            revue_data = get_scimago_ranking(revue, issn_request, year)
-            open_access = metadata.get("open_access", {})
-            oa_url = open_access.get("oa_url", None)
-            if not oa_url:
-                oa_url = url  # fallback
+            pass
+        elif pub_type == 'inproceedings':
+            match = re.search(r'\((.*?)\)', conference_name)
+
+            if match:
+                acronym = match.group(1)
+                conference_name = re.sub(r'\s*\(.*?\)\s*', ' ', conference_name).strip()
+            else:
+                acronym = "" 
+            print(f"acronym: {acronym}, conference name: {conference_name}")
+            
+            core_ranking = get_core_ranking(acronym=acronym,conference_name=conference_name,year=year)
 
         # --- Prepare grouped outputs ---
 
@@ -306,7 +364,7 @@ def fetch_dblp_publications(dblp_url: str):
             "doi": doi,
             "annee_publication": year,
             "url": oa_url or url,
-            "is_open_access": metadata.get("open_access", {}).get("is_oa", False),
+            "is_open_access": metadata.get("open_access", {}).get("is_oa", None),
             "position":position
         }
 
@@ -315,6 +373,11 @@ def fetch_dblp_publications(dblp_url: str):
             "nom": revue,
             "issn": issn_request,
             "e_issn": revue_data.get("e_issn") if revue_data else None,
+            "url": primary_location.get('landing_page_url',None)
+        }
+        conference_data = {
+            "nom": revue,
+            "url": primary_location.get('landing_page_url',None)
         }
 
         # 3️⃣ Ranking data (Scimago + DGRSDT placeholder)
@@ -322,17 +385,26 @@ def fetch_dblp_publications(dblp_url: str):
             "annee": year,
             "scimago_rank": revue_data.get("scimago_rank") if revue_data else None,
             "dgrsdt_rank": None,  # placeholder, to be filled later
-            "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else False,
+            "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus')
+        }
+        conference_ranking = {
+            "annee": year,
+            "scimago_rank": revue_data.get("scimago_rank") if revue_data else None,
+            "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus'),
+            "core_ranking":core_ranking or None
         }
 
         pubs.append({
             "type": pub_type,
             "publication_data": publication_data,
-            "journal_data": journal_data,
-            "ranking_data": ranking_data
+            "journal_data": journal_data if pub_type == 'atricle' else conference_data,
+            "ranking_data": ranking_data if pub_type == 'article' else conference_ranking
         })
 
     return pubs
+
+
+
 
 
 # --- Example usage ---

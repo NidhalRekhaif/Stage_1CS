@@ -61,7 +61,7 @@ class RevueBase(SQLModel):
     nom : str
     issn : str | None = Field(default=None,unique=True,index=True)
     e_issn : str | None = Field(default=None,unique=True,index=True)
-
+    url : str | None = None
 
     @field_validator("issn","e_issn")
     @classmethod
