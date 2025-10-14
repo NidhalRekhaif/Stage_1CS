@@ -3,11 +3,9 @@ import xml.etree.ElementTree as ET
 from sqlmodel import Session,select
 from Chercheurs.schemas import Chercheur
 from .revue_schemas import PublicationRevue,Revue,RevueRanking
-from .liens_chercheur_pub import LienChercheurRevue
-import requests
-
-
-
+from .liens_chercheur_pub import LienChercheurRevue,LienChercheurConference
+from .conference_schemas import ConferenceRanking,Conference,PublicationConference
+from database import engine
 import os
 import json
 import pandas as pd
@@ -539,7 +537,102 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
 
             session.commit()
         else:
-            pass
+            doi = pub_data.get("doi")
+            titre = (pub_data.get("titre") or "").strip().lower()
+            conference = None
+
+            # --- Check existing publication (by DOI or title/year) ---
+            if doi:
+                existing_pub = session.exec(
+                    select(PublicationConference).where(PublicationConference.doi == doi)
+                ).first()
+            else:
+                existing_pub = session.exec(
+                    select(PublicationConference)
+                    .where(
+                        (PublicationConference.titre == titre)
+                        & (PublicationConference.annee_publication == int(pub_data.get("annee_publication", 0)))
+                    )
+                ).first()
+
+            # --- If publication doesn't exist, create it and link to conference ---
+            if not existing_pub:
+                    nom = journal_data.get("nom", "") or ''
+                    conference = session.exec(
+                        select(Conference).where(Conference.nom == nom.upper())
+                    ).first()
+
+                    if not conference:
+                        conference = Conference(**journal_data)
+                        session.add(conference)
+                        session.flush()
+                        session.refresh(conference)
+
+                    existing_pub = PublicationConference(**pub_data)
+                    session.add(existing_pub)
+                    session.flush()
+                    session.refresh(existing_pub)
+
+            # --- Handle ranking ---
+            annee = ranking_data.get("annee")
+            if annee:
+                annee = int(annee)
+                conference_ranking = session.exec(
+                    select(ConferenceRanking)
+                    .where(
+                        (ConferenceRanking.annee == annee)
+                        & (ConferenceRanking.conference_id == conference.id)
+                    )
+                ).first()
+
+                if not conference_ranking:
+                    conference_ranking = ConferenceRanking(**ranking_data, conference_id=conference.id)
+                    session.add(conference_ranking)
+
+            # --- Link researcher to this publication ---
+            lien_chercheur_publication = session.exec(
+                select(LienChercheurConference)
+                .where(
+                    (LienChercheurConference.chercheur_id == researcher.id)
+                    & (LienChercheurConference.publication_id == existing_pub.id)
+                )
+            ).first()
+
+            if not lien_chercheur_publication:
+                lien_chercheur_publication = LienChercheurConference(
+                    **researcher_position,
+                    chercheur_id=researcher.id,
+                    publication_id=existing_pub.id
+                )
+                session.add(lien_chercheur_publication)
+
+            session.commit()
+
+
+
+
+
+
+
+
+def process_all_researchers():
+    """Fetch and process DBLP publications for all researchers with a valid DBLP URL."""
+    with Session(engine) as session:
+        chercheurs = session.exec(
+            select(Chercheur).where(Chercheur.dblp_url.is_not(None))
+        ).all()
+
+        print(f"🔍 Found {len(chercheurs)} researchers with DBLP URLs.")
+
+        for researcher in chercheurs:
+            try:
+                print(f" Processing researcher: {researcher.nom} ({researcher.dblp_url})")
+                process_researcher_publications(session, researcher)
+                print(f" Done with {researcher.nom}")
+            except Exception as e:
+                session.rollback()
+                print(f" Error processing {researcher.nom}: {e}")
+
 
             
                     
@@ -548,8 +641,6 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
 
 # --- Example usage ---
 if __name__ == "__main__":
-    dblp_url = "https://dblp.org/pid/96/1461"  # Replace with real DBLP researcher URL
-    pubs = fetch_dblp_publications(dblp_url)
+   process_all_researchers()
 
-    for pub in pubs:  # print first 5 for demo
-        print(pub)
+  
