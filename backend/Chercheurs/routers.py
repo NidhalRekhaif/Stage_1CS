@@ -10,10 +10,10 @@ chercheurs_router = APIRouter()
 
 
 
-@chercheurs_router.get("/labos",response_model=Labo | list[Labo])
+@chercheurs_router.get("/labos",response_model=list[Labo])
 def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
     if labo_name:
-        result = session.exec(select(Labo).where(Labo.nom == labo_name)).first()
+        result = session.exec(select(Labo).where(Labo.nom == labo_name)).all()
         if result:
             return result
         else:
@@ -58,7 +58,7 @@ def delete_labo(session:SessionDep,labo_id : int = Path(...)):
     session.commit()
 
 
-@chercheurs_router.get("/",response_model=list[ChercheurRead] )
+@chercheurs_router.get("/",response_model=list[ChercheurRead])
 def get_chercheurs(session:SessionDep):
     result = session.exec(select(Chercheur))
     if not result:
