@@ -30,40 +30,39 @@
   },
   "dgrsdt": {
     "2024":{
-            "A+":"Rankings/dgrsdt/2024/",
-            "A":"Rankings/dgrsdt/2024/",
-            "B":"Rankings/dgrsdt/2024/",
-            "PEDIATRICE":"Rankings/dgrsdt/2024/"
+            "A":"Rankings/dgrsdt/2024/A.xlsx",
+            "B":"Rankings/dgrsdt/2024/B.xlsx",
+            "PEDIATRICE":"Rankings/dgrsdt/2024/PEDIATRICE.xlsx"
     },
     "2023":{
-            "A+":"Rankings/dgrsdt/2023/",
-            "A":"Rankings/dgrsdt/2023/",
-            "B":"Rankings/dgrsdt/2023/",
-            "PEDIATRICE":"Rankings/dgrsdt/2023/"
+       
+            "A":"Rankings/dgrsdt/2023/A.xlsx",
+        
+            "PEDIATRICE":"Rankings/dgrsdt/2023/PEDIATRICE.xlsx"
     },
     "2022":{
-            "A+":"Rankings/dgrsdt/2022/",
-            "A":"Rankings/dgrsdt/2022/",
-            "B":"Rankings/dgrsdt/2022/",
-            "PEDIATRICE":"Rankings/dgrsdt/2022/"
+        
+            "A":"Rankings/dgrsdt/2022/A.xlsx",
+            "B":"Rankings/dgrsdt/2022/B.xlsx",
+            "PEDIATRICE":"Rankings/dgrsdt/2022/PEDIATRICE.xlsx"
     },
     "2021":{ 
-            "A+":"Rankings/dgrsdt/2021/",
-            "A":"Rankings/dgrsdt/2021/",
-            "B":"Rankings/dgrsdt/2021/",
-            "PEDIATRICE":"Rankings/dgrsdt/2021/"
+        
+            "A":"Rankings/dgrsdt/2021/A.xlsx",
+            "B":"Rankings/dgrsdt/2021/B.xlsx",
+            "PEDIATRICE":"Rankings/dgrsdt/2021/PEDIATRICE.xlsx"
     },
     "2020":{
-            "A+":"Rankings/dgrsdt/2020/",
-            "A":"Rankings/dgrsdt/2020/",
-            "B":"Rankings/dgrsdt/2020/",
-            "PEDIATRICE":"Rankings/dgrsdt/2020/"
+        
+            "A":"Rankings/dgrsdt/2020/A.xlsx",
+            "B":"Rankings/dgrsdt/2020/B.xlsx",
+            "PEDIATRICE":"Rankings/dgrsdt/2020/PEDIATRICE.xlsx"
     },
     "2019":{
-            "A+":"Rankings/dgrsdt/2019/",
-            "A":"Rankings/dgrsdt/2019/",
-            "B":"Rankings/dgrsdt/2019/",
-            "PEDIATRICE":"Rankings/dgrsdt/2019/"
+            "A+":"Rankings/dgrsdt/2019/A+.xlsx",
+            "A":"Rankings/dgrsdt/2019/A.xlsx",
+            "B":"Rankings/dgrsdt/2019/B.xlsx",
+            "PEDIATRICE":"Rankings/dgrsdt/2019/PEDIATRICE.xlsx"
     }
   },
   "core":{

@@ -1,8 +1,9 @@
 import requests
 import xml.etree.ElementTree as ET
-
-
-
+from sqlmodel import Session,select
+from Chercheurs.schemas import Chercheur
+from .revue_schemas import PublicationRevue,Revue,RevueRanking
+from .liens_chercheur_pub import LienChercheurRevue
 import requests
 
 
@@ -25,7 +26,7 @@ def get_issn_from_openalex(venue_name: str | None,full_name : str | None) -> tup
     """
     url = "https://api.openalex.org/sources"
     params = {"filter": f"display_name.search:{venue_name}", "per-page": 1}
-
+    is_scopus_indexed = None
     try:
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
@@ -98,6 +99,54 @@ def load_metadata():
 
 import pandas as pd
 import os
+
+
+
+def get_dgrsdt(issn_request: str | None, journal_name: str | None, year: int) -> str | None:
+    files = load_metadata()
+    targeted_files = files.get('dgrsdt', {}).get(str(year), {})
+    
+    if not targeted_files:
+        print(f"No files found for year {year}.")
+        return None
+
+    for rank, file_path in targeted_files.items():
+        if not os.path.exists(file_path):
+            print(f"[WARN] Metadata lists {file_path}, but file not found.")
+            continue
+
+        df = pd.read_excel(file_path)  # default header from first row
+        # PEDIATRICE files use a different column name
+        if rank.upper() == "PEDIATRICE":
+            if journal_name and journal_name in df["Les Revues"].astype(str).values:
+                print(f"Found journal in {file_path}")
+                return rank
+            continue
+
+        # Regular DGRSDT ranking files
+        if issn_request:
+            normalized_issn = issn_request.strip().lower().replace("-", "").replace(" ", "")
+    
+            # Normalize ISSNs in the DataFrame safely
+            df["normalized"] = (
+            df["ISSN"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace("-", "", regex=False)
+        .str.replace(" ", "", regex=False)
+        )
+
+            if normalized_issn in df["normalized"].values:
+                print(f"Found ISSN match in {file_path}")
+                return rank
+
+        if journal_name and journal_name in df["Journal title"].astype(str).values:
+            print(f"Found journal title match in {file_path}")
+            return rank
+
+    print(f"No match found for {issn_request or journal_name} in year {year}.")
+    return None
 
 
 
@@ -246,7 +295,8 @@ def get_metadata_from_openalex(doi: str | None,title : str | None) -> dict:
                 "oa_url": data.get("open_access", {}).get("oa_url",None),
             },
             "primary_location": data.get("primary_location",{}),
-            "authorships":data.get("authorships",{})
+            "authorships":data.get("authorships",{}),
+            "citations":data.get("cited_by_count",None)
         }
         
         # Reconstruct abstract if present in inverted index
@@ -341,8 +391,9 @@ def fetch_dblp_publications(dblp_url: str):
         core_ranking = None
         conference_name = revue or ''
         acronym = ""
+        dgrst_rank = None
         if pub_type == 'article':
-            pass
+            dgrst_rank = get_dgrsdt(issn_request=issn_request,journal_name=revue,year=year)
         elif pub_type == 'inproceedings':
             match = re.search(r'\((.*?)\)', conference_name)
 
@@ -365,6 +416,9 @@ def fetch_dblp_publications(dblp_url: str):
             "annee_publication": year,
             "url": oa_url or url,
             "is_open_access": metadata.get("open_access", {}).get("is_oa", None),
+            "citations":metadata.get('citations')
+        }
+        researcher_position = {
             "position":position
         }
 
@@ -384,7 +438,7 @@ def fetch_dblp_publications(dblp_url: str):
         ranking_data = {
             "annee": year,
             "scimago_rank": revue_data.get("scimago_rank") if revue_data else None,
-            "dgrsdt_rank": None,  # placeholder, to be filled later
+            "dgrsdt_rank": dgrst_rank,  # placeholder, to be filled later
             "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus')
         }
         conference_ranking = {
@@ -393,17 +447,102 @@ def fetch_dblp_publications(dblp_url: str):
             "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus'),
             "core_ranking":core_ranking or None
         }
-
+        
         pubs.append({
             "type": pub_type,
             "publication_data": publication_data,
-            "journal_data": journal_data if pub_type == 'atricle' else conference_data,
+            "researcher_position":researcher_position,
+            "journal_data": journal_data if pub_type == 'article' else conference_data,
             "ranking_data": ranking_data if pub_type == 'article' else conference_ranking
         })
 
     return pubs
 
+def process_researcher_publications(session: Session, researcher: Chercheur):
+    dblp = researcher.dblp_url
+    publications = fetch_dblp_publications(dblp_url=dblp)
 
+    for publication in publications:
+        pub_type = publication.get("type")
+        pub_data = publication.get("publication_data", {})
+        researcher_position = publication.get("researcher_position", {})
+        journal_data = publication.get("journal_data", {})
+        ranking_data = publication.get("ranking_data", {})
+
+        if pub_type == "article":
+            doi = pub_data.get("doi")
+            titre = (pub_data.get("titre") or "").strip().lower()
+            revue = None
+
+            if doi:
+                existing_pub = session.exec(
+                    select(PublicationRevue).where(PublicationRevue.doi == doi)
+                ).first()
+            else:
+                existing_pub = session.exec(
+                    select(PublicationRevue)
+                    .where(
+                        (PublicationRevue.titre == titre)
+                        & (PublicationRevue.annee_publication == int(pub_data.get("annee_publication", 0)))
+                    )
+                ).first()
+
+            if not existing_pub:
+                issn = journal_data.get("issn")
+                if issn:
+                    revue = session.exec(select(Revue).where(Revue.issn == issn)).first()
+                else:
+                    nom = journal_data.get("nom", "")
+                    revue = session.exec(select(Revue).where(Revue.nom == nom)).first()
+
+                if not revue:
+                    revue = Revue(**journal_data)
+                    session.add(revue)
+                    session.flush()  # no commit, just get the ID
+                    session.refresh(revue)
+
+                existing_pub = PublicationRevue(**pub_data)
+                session.add(existing_pub)
+                session.flush()
+                session.refresh(existing_pub)
+
+            annee = ranking_data.get("annee")
+            if annee:
+                annee = int(annee)
+                revue_ranking = session.exec(
+                    select(RevueRanking)
+                    .where(
+                        (RevueRanking.annee == annee)
+                        & (RevueRanking.revue_id == revue.id)
+                    )
+                ).first()
+
+                if not revue_ranking:
+                    revue_ranking = RevueRanking(**ranking_data, revue_id=revue.id)
+                    session.add(revue_ranking)
+
+            lien_chercheur_publication = session.exec(
+                select(LienChercheurRevue)
+                .where(
+                    (LienChercheurRevue.chercheur_id == researcher.id)
+                    & (LienChercheurRevue.publication_revue_id == existing_pub.id)
+                )
+            ).first()
+
+            if not lien_chercheur_publication:
+                lien_chercheur_publication = LienChercheurRevue(
+                    **researcher_position,
+                    chercheur_id=researcher.id,
+                    publication_revue_id=existing_pub.id
+                )
+                session.add(lien_chercheur_publication)
+
+            session.commit()
+        else:
+            pass
+
+            
+                    
 
 
 

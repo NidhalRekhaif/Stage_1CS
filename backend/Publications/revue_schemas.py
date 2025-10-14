@@ -26,8 +26,9 @@ class PublicationRevueBase(SQLModel):
     abstract : str | None = Field(default=None)
     doi : str | None  = Field(default=None,unique=True,index=True)
     annee_publication : int = Field(...,gt=1950)
+    citations : int | None = Field(default=None)
     url : str | None = Field(default=None,description="Lien vers la publication s'il existe")
-    is_open_access : bool = False
+    is_open_access : bool | None = None
 
 
 
@@ -47,6 +48,13 @@ class PublicationRevueBase(SQLModel):
             return None
         HttpUrl(value)
         return value
+    
+    @field_validator('titre')
+    @classmethod
+    def titre_validate(cls,value:str):
+        if value is None:
+            return None
+        return value.strip().title()
 
 
 
@@ -69,6 +77,13 @@ class RevueBase(SQLModel):
         if not value:
             return None
         return value.replace('-','')
+    
+    @field_validator('nom')
+    @classmethod
+    def titre_validate(cls,value:str):
+        if value is None:
+            return None
+        return value.strip().title()
 
 class Revue(RevueBase,table=True):
     id : int = Field(...,primary_key=True)

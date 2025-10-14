@@ -17,7 +17,7 @@ class PublicationConferenceBase(SQLModel):
     annee_publication : int = Field(...,gt=1950)
     url : str | None = Field(default=None,description="Lien vers la publication s'il existe")
     citations : int | None = Field(default=None)
-    is_open_access : bool = False
+    is_open_access : bool | None = None
     
     @field_validator("url")
     @classmethod
@@ -33,6 +33,14 @@ class PublicationConferenceBase(SQLModel):
         if len(str(value)) != 4:
             raise ValueError("Année doit avoir 4 chiffres.")
         return value
+    
+    @field_validator('titre')
+    @classmethod
+    def titre_validate(cls,value:str):
+        if value is None:
+            return None
+        return value.strip().title()
+    
 
 class PublicationConference(PublicationConferenceBase,table = True):
     id : int = Field(...,primary_key=True)
