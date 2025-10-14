@@ -39,3 +39,7 @@ class LienChercheurRevue(SQLModel,table = True):
         if value.strip().lower() not in ['first','middle','last']:
             raise ValueError("Cet ordre n'est pas accepté choisissez:first,middle ou last")
         return value.strip().lower()
+
+
+
+from .conference_schemas import PublicationConference
