@@ -21,11 +21,10 @@ class LaboBase(SQLModel):
     description : str | None = Field(default=None)
     siteweb : str | None = Field(default=None)
 
-    @field_validator('nom')
-    @classmethod
-    def upper_nom(cls, value: str) -> str:
-        return value.upper() if value else value
-    
+
+    def model_post_init(self, __context):
+        if self.nom:
+            self.nom = self.nom.upper()
 
     @field_validator('siteweb')
     @classmethod
@@ -36,7 +35,7 @@ class LaboBase(SQLModel):
         return value
 
 class Labo(LaboBase,table=True):
-    id: int = Field(primary_key=True,ge=0)
+    id: int | None = Field(default=None,primary_key=True,ge=0)
     chercheurs:list["Chercheur"] = Relationship(back_populates="labo")
 
 
@@ -100,6 +99,12 @@ class ChercheurBase(SQLModel):
     def upper_prenom(cls, value: str) -> str:
         return value.upper() if value else value
     
+
+    def model_post_init(self, __context):
+        if self.nom:
+           self.nom = self.nom.upper()
+        if self.prenom:
+           self.prenom = self.prenom.upper()
 
 
 class Chercheur(ChercheurBase,table=True):
