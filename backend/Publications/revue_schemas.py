@@ -1,7 +1,7 @@
-from sqlmodel import SQLModel,Field,Relationship
+from sqlmodel import SQLModel,Field,Relationship,CheckConstraint
 from pydantic import field_validator,HttpUrl
 from enum import Enum
-from Publications.liens_chercheur_pub import LienChercheurRevue
+from .liens_chercheur_pub import LienChercheurRevue
 class DgrstRanking(str,Enum):
     AA = "A+"
     A = "A"
@@ -18,6 +18,7 @@ class ScimagoRanking(str,Enum):
     Q2 = "Q2"
     Q3 = "Q3"
     Q4 = "Q4"
+    UNKNOWN = '-'
     
 
 
@@ -49,17 +50,10 @@ class PublicationRevueBase(SQLModel):
         HttpUrl(value)
         return value
     
-    @field_validator('titre')
-    @classmethod
-    def titre_validate(cls,value:str):
-        if value is None:
-            return None
-        return value.strip().title()
-
-
+    
 
 class PublicationRevue(PublicationRevueBase,table=True):
-    id : int = Field(...,primary_key=True)
+    id : int | None = Field(default=None,primary_key=True)
     revue_id : int | None = Field(default=None,foreign_key="revue.id",ondelete="SET NULL")
     revue : "Revue" = Relationship(back_populates="publications")
     chercheur_links : list [LienChercheurRevue] = Relationship(back_populates="publication_revue")
@@ -71,22 +65,12 @@ class RevueBase(SQLModel):
     e_issn : str | None = Field(default=None,unique=True,index=True)
     url : str | None = None
 
-    @field_validator("issn","e_issn")
-    @classmethod
-    def transform_issn(cls,value : str | None):
-        if not value:
-            return None
-        return value.replace('-','')
+  
     
-    @field_validator('nom')
-    @classmethod
-    def titre_validate(cls,value:str):
-        if value is None:
-            return None
-        return value.strip().title()
+    
 
 class Revue(RevueBase,table=True):
-    id : int = Field(...,primary_key=True)
+    id : int | None = Field(default=None,primary_key=True)
     publications : list[PublicationRevue] = Relationship(back_populates="revue")
     rankings : list["RevueRanking"] = Relationship(back_populates="revue")
 
@@ -107,6 +91,18 @@ class RevueRankingBase(SQLModel):
 
 
 class RevueRanking(RevueRankingBase,table = True):
-    annee : int = Field(...,primary_key=True)
-    revue_id : int = Field(...,foreign_key="revue.id",primary_key=True,ondelete='CASCADE')
+    annee : int | None = Field(default=None,primary_key=True)
+    revue_id : int | None = Field(default=None,foreign_key="revue.id",primary_key=True,ondelete='CASCADE')
     revue : Revue = Relationship(back_populates="rankings")
+
+
+    __table_args__ = (
+        CheckConstraint(
+            "scimago_rank IN ('Q1', 'Q2', 'Q3', 'Q4') OR scimago_rank IS NULL",
+            name="valid_scimago_rank",
+        ),
+        CheckConstraint(
+        "dgrsdt_rank IN ('A+','A','B','C','D','E') OR dgrsdt_rank IS NULL",
+        name='validate_dgrsdt_rank',
+        ),
+    )

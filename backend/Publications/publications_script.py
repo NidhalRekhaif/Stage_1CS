@@ -2,10 +2,11 @@ import requests
 import xml.etree.ElementTree as ET
 from sqlmodel import Session,select
 from Chercheurs.schemas import Chercheur
-from .revue_schemas import PublicationRevue,Revue,RevueRanking
+from .revue_schemas import PublicationRevue,Revue,RevueRanking,RevueBase,RevueRankingBase,PublicationRevueBase
 from .liens_chercheur_pub import LienChercheurRevue,LienChercheurConference
-from .conference_schemas import ConferenceRanking,Conference,PublicationConference
+from .conference_schemas import ConferenceRanking,Conference,PublicationConference,ConferenceBase,ConferenceRankingBase,PublicationConferenceBase
 from database import engine
+from sqlalchemy import func
 import os
 import json
 import pandas as pd
@@ -435,7 +436,7 @@ def fetch_dblp_publications(dblp_url: str):
         # 3️⃣ Ranking data (Scimago + DGRSDT placeholder)
         ranking_data = {
             "annee": year,
-            "scimago_rank": revue_data.get("scimago_rank") if revue_data else None,
+            "scimago_rank": revue_data.get("scimago_rank",None) if revue_data else None,
             "dgrsdt_rank": dgrst_rank,  # placeholder, to be filled later
             "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus')
         }
@@ -457,7 +458,7 @@ def fetch_dblp_publications(dblp_url: str):
     return pubs
 
 def process_researcher_publications(session: Session, researcher: Chercheur):
-    dblp = researcher.dblp_url
+    dblp = 'https://dblp.org/pid/390/6784.html'
     publications = fetch_dblp_publications(dblp_url=dblp)
 
     for publication in publications:
@@ -466,40 +467,49 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
         researcher_position = publication.get("researcher_position", {})
         journal_data = publication.get("journal_data", {})
         ranking_data = publication.get("ranking_data", {})
+        s_rank = ranking_data.get('scimago_rank')
+        if s_rank and s_rank == '-':
+            ranking_data['scimago_rank'] = None
 
         if pub_type == "article":
             doi = pub_data.get("doi")
-            titre = (pub_data.get("titre") or "").strip().lower()
+            titre = (pub_data.get("titre") or "").strip().upper()
             revue = None
+            issn = journal_data.get("issn")
+            if issn:
+                    revue = session.exec(select(Revue).where(Revue.issn == issn)).first()
+            else:
+                    nom = journal_data.get("nom")
+                    if nom is None:
+                        continue
+                    nom = nom.strip().upper()
+                    revue = session.exec(select(Revue).where(func.trim(func.upper((Revue.nom))) == nom)).first()
+
+            if not revue:
+                    revue_base = RevueBase.model_validate(journal_data)
+                    revue = Revue(**revue_base.model_dump())
+                    session.add(revue)
+                    session.flush()  # no commit, just get the ID
+                    session.refresh(revue)
 
             if doi:
                 existing_pub = session.exec(
                     select(PublicationRevue).where(PublicationRevue.doi == doi)
                 ).first()
             else:
+                if titre == '':
+                    continue
                 existing_pub = session.exec(
                     select(PublicationRevue)
                     .where(
-                        (PublicationRevue.titre == titre)
+                        (func.trim(func.upper(PublicationRevue.titre)) == titre)
                         & (PublicationRevue.annee_publication == int(pub_data.get("annee_publication", 0)))
                     )
                 ).first()
 
             if not existing_pub:
-                issn = journal_data.get("issn")
-                if issn:
-                    revue = session.exec(select(Revue).where(Revue.issn == issn)).first()
-                else:
-                    nom = journal_data.get("nom", "")
-                    revue = session.exec(select(Revue).where(Revue.nom == nom)).first()
-
-                if not revue:
-                    revue = Revue(**journal_data)
-                    session.add(revue)
-                    session.flush()  # no commit, just get the ID
-                    session.refresh(revue)
-
-                existing_pub = PublicationRevue(**pub_data)
+                pub_base = PublicationRevueBase.model_validate(pub_data)
+                existing_pub = PublicationRevue(**pub_base.model_dump() ,revue_id = revue.id)
                 session.add(existing_pub)
                 session.flush()
                 session.refresh(existing_pub)
@@ -516,59 +526,65 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
                 ).first()
 
                 if not revue_ranking:
-                    revue_ranking = RevueRanking(**ranking_data, revue_id=revue.id)
+                    ranking_base = RevueRankingBase.model_validate(ranking_data)
+                    revue_ranking = RevueRanking(**ranking_base.model_dump(), revue_id = revue.id)
                     session.add(revue_ranking)
 
             lien_chercheur_publication = session.exec(
                 select(LienChercheurRevue)
                 .where(
                     (LienChercheurRevue.chercheur_id == researcher.id)
-                    & (LienChercheurRevue.publication_revue_id == existing_pub.id)
+                    & (LienChercheurRevue.publication_id == existing_pub.id)
                 )
             ).first()
 
             if not lien_chercheur_publication:
                 lien_chercheur_publication = LienChercheurRevue(
                     **researcher_position,
-                    chercheur_id=researcher.id,
-                    publication_revue_id=existing_pub.id
+                    chercheur_id =researcher.id,
+                    publication_id =existing_pub.id
                 )
                 session.add(lien_chercheur_publication)
 
             session.commit()
         else:
             doi = pub_data.get("doi")
-            titre = (pub_data.get("titre") or "").strip().lower()
+            titre = (pub_data.get("titre") or "").strip().upper()
             conference = None
 
+            nom = journal_data.get("nom", "") 
+            if nom is None:
+                        continue
+            nom = nom.strip().upper()
+            conference = session.exec(
+                        select(Conference).where(func.trim(func.upper(Conference.nom)) == nom)
+                    ).first()
+            if not conference :
+                        conference_base = ConferenceBase.model_validate(journal_data)
+                        conference = Conference(**conference_base.model_dump())
+                        session.add(conference)
+                        session.flush()
+                        session.refresh(conference)
             # --- Check existing publication (by DOI or title/year) ---
             if doi:
                 existing_pub = session.exec(
                     select(PublicationConference).where(PublicationConference.doi == doi)
                 ).first()
             else:
+                if titre == '':
+                    continue
                 existing_pub = session.exec(
                     select(PublicationConference)
                     .where(
-                        (PublicationConference.titre == titre)
+                        (func.trim(func.upper(PublicationConference.titre)) == titre)
                         & (PublicationConference.annee_publication == int(pub_data.get("annee_publication", 0)))
                     )
                 ).first()
 
             # --- If publication doesn't exist, create it and link to conference ---
             if not existing_pub:
-                    nom = journal_data.get("nom", "") or ''
-                    conference = session.exec(
-                        select(Conference).where(Conference.nom == nom.upper())
-                    ).first()
-
-                    if not conference:
-                        conference = Conference(**journal_data)
-                        session.add(conference)
-                        session.flush()
-                        session.refresh(conference)
-
-                    existing_pub = PublicationConference(**pub_data)
+                    pub_base = PublicationConferenceBase.model_validate(pub_data)
+                    existing_pub = PublicationConference(**pub_base.model_dump(),conference_id = conference.id)
                     session.add(existing_pub)
                     session.flush()
                     session.refresh(existing_pub)
@@ -576,8 +592,8 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
             # --- Handle ranking ---
             annee = ranking_data.get("annee")
             if annee:
-                annee = int(annee)
-                conference_ranking = session.exec(
+                    annee = int(annee)
+            conference_ranking = session.exec(
                     select(ConferenceRanking)
                     .where(
                         (ConferenceRanking.annee == annee)
@@ -585,8 +601,9 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
                     )
                 ).first()
 
-                if not conference_ranking:
-                    conference_ranking = ConferenceRanking(**ranking_data, conference_id=conference.id)
+            if not conference_ranking:
+                    ranking_base = ConferenceRankingBase.model_validate(ranking_data)
+                    conference_ranking = ConferenceRanking(**ranking_base.model_dump(), conference_id =conference.id)
                     session.add(conference_ranking)
 
             # --- Link researcher to this publication ---
@@ -601,8 +618,8 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
             if not lien_chercheur_publication:
                 lien_chercheur_publication = LienChercheurConference(
                     **researcher_position,
-                    chercheur_id=researcher.id,
-                    publication_id=existing_pub.id
+                    chercheur_id = researcher.id,
+                    publication_id = existing_pub.id
                 )
                 session.add(lien_chercheur_publication)
 
@@ -621,7 +638,7 @@ def process_all_researchers():
         chercheurs = session.exec(
             select(Chercheur).where(Chercheur.dblp_url.is_not(None))
         ).all()
-
+        failed = 0
         print(f"🔍 Found {len(chercheurs)} researchers with DBLP URLs.")
 
         for researcher in chercheurs:
@@ -631,7 +648,10 @@ def process_all_researchers():
                 print(f" Done with {researcher.nom}")
             except Exception as e:
                 session.rollback()
+                failed+=1
                 print(f" Error processing {researcher.nom}: {e}")
+
+    return failed
 
 
             
@@ -641,6 +661,6 @@ def process_all_researchers():
 
 # --- Example usage ---
 if __name__ == "__main__":
-   process_all_researchers()
+   pass
 
   

@@ -1,16 +1,13 @@
 import numpy as np
 import pandas as pd
 from sqlmodel import create_engine,text,Session
-from database import DATABASE_URL
+from database import DATABASE_URL,engine
 from .schemas import Chercheur
 from .orcid_s import get_dblp_url_from_name
-SOURCE_URL = "Lists-chercheurs/List-chercheur-lcsi.csv"
-def main(csv_path,labo_id : int | None = None):
-    engine = create_engine(DATABASE_URL,echo=True,connect_args={'check_same_thread':False})
-    with engine.connect() as connection:
-        connection.execute(text("PRAGMA foreign_keys=ON"))
-    df = pd.read_csv(csv_path, header=None)
-    df.columns = ['nom', 'prenom', 'email', 'grade','google_scholar_url']
+SOURCE_URL = "Lists-chercheurs/avecindexes.csv"
+def main(csv_path,session:Session,labo_id : int | None = None):
+    df = pd.read_csv(csv_path)
+    
     
     successful = 0
     failed = []
@@ -24,6 +21,8 @@ def main(csv_path,labo_id : int | None = None):
                     email=row['email'],
                     grade=row['grade'],
                     google_scholar_url=row['google_scholar_url'],
+                    h_index = row['h_index'],
+                    i_10_index=row['i_10_index'],
                     labo_id=labo_id
                 )
                 chercheur.dblp_url = get_dblp_url_from_name(chercheur.full_name)
@@ -41,7 +40,8 @@ def main(csv_path,labo_id : int | None = None):
 
 
 if __name__ == '__main__':
-    main(SOURCE_URL)
+    with Session(engine) as session:
+        main(SOURCE_URL,session,1)
 
 
 

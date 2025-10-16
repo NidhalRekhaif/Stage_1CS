@@ -1,7 +1,6 @@
-from sqlmodel import SQLModel,Field,Relationship
+from sqlmodel import SQLModel,Field,Relationship,CheckConstraint
 from pydantic import field_validator,HttpUrl
 from enum import Enum
-
 from .revue_schemas import ScimagoRanking
 from .liens_chercheur_pub import LienChercheurConference
 class CoreRanking(str,Enum):
@@ -34,16 +33,12 @@ class PublicationConferenceBase(SQLModel):
             raise ValueError("Année doit avoir 4 chiffres.")
         return value
     
-    @field_validator('titre')
-    @classmethod
-    def titre_validate(cls,value:str):
-        if value is None:
-            return None
-        return value.strip().title()
+   
+
     
 
 class PublicationConference(PublicationConferenceBase,table = True):
-    id : int = Field(...,primary_key=True)
+    id : int | None = Field(default=None,primary_key=True)
     conference_id : int | None = Field(default=None,foreign_key="conference.id",ondelete='SET NULL')
     conference : "Conference" = Relationship(back_populates="publications")
     chercheur_links : list[LienChercheurConference] = Relationship(back_populates="publication_conference")
@@ -54,12 +49,7 @@ class ConferenceBase(SQLModel):
     acronyme : str | None = None
     url : str | None = None
 
-    @field_validator("acronyme","nom")
-    @classmethod
-    def upper_name_acronyme(cls,value):
-        if value is None:
-            return None
-        return value.upper()
+   
     
 
     @field_validator("url")
@@ -72,7 +62,7 @@ class ConferenceBase(SQLModel):
 
 
 class Conference(ConferenceBase,table = True):
-    id : int = Field(...,primary_key=True)
+    id : int | None = Field(default=None,primary_key=True)
     publications : list[PublicationConference] = Relationship(back_populates="conference")
     rankings : list["ConferenceRanking"] = Relationship(back_populates="conference")
 
@@ -92,8 +82,21 @@ class ConferenceRankingBase(SQLModel):
         return value
 
 class ConferenceRanking(ConferenceRankingBase,table = True):
-    conference_id : int = Field(...,primary_key=True,foreign_key="conference.id",ondelete='CASCADE')
-    annee : int = Field(...,primary_key=True)
+    conference_id : int | None = Field(default=None,primary_key=True,foreign_key="conference.id",ondelete='CASCADE')
+    annee : int | None = Field(default=None,primary_key=True)
     conference : Conference = Relationship(back_populates="rankings")
+
+
+
+    __table_args__ = (
+        CheckConstraint(
+            "scimago_rank IN ('Q1', 'Q2', 'Q3', 'Q4') OR scimago_rank IS NULL",
+            name="valid_scimago_rank",
+        ),
+        CheckConstraint(
+            "core_ranking IN ('A*','A','B','C') OR core_ranking IS NULL",
+            name='validate_core_ranking',
+        ),
+    )
 
 

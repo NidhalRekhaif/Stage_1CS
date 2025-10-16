@@ -3,8 +3,8 @@ from pydantic import field_validator
 
 
 class LienChercheurConference(SQLModel,table = True):
-    chercheur_id: int = Field(foreign_key="chercheur.id", primary_key=True,ondelete='CASCADE')
-    publication_id: int = Field(foreign_key="publicationconference.id", primary_key=True,ondelete='CASCADE')
+    chercheur_id: int | None= Field(default=None,foreign_key="chercheur.id", primary_key=True,ondelete='CASCADE')
+    publication_id: int | None = Field(default=None,foreign_key="publicationconference.id", primary_key=True,ondelete='CASCADE')
     
     chercheur_ordre: str | None = Field(default=None, description="Position du chercheur dans la publication.")
 
@@ -21,8 +21,8 @@ class LienChercheurConference(SQLModel,table = True):
         return value.strip().lower()
 
 class LienChercheurRevue(SQLModel,table = True):
-    chercheur_id: int = Field(foreign_key="chercheur.id", primary_key=True,ondelete='CASCADE')
-    publication_id: int = Field(foreign_key="publicationrevue.id", primary_key=True,ondelete='CASCADE')
+    chercheur_id: int | None = Field(default=None,foreign_key="chercheur.id", primary_key=True,ondelete='CASCADE')
+    publication_id: int | None = Field(default=None,foreign_key="publicationrevue.id", primary_key=True,ondelete='CASCADE')
     
     chercheur_ordre: str | None = Field(default=None, description="Position du chercheur dans la publication.")
 
@@ -31,7 +31,7 @@ class LienChercheurRevue(SQLModel,table = True):
 
 
 
-    @field_validator("chercheur_ordre")
+    @field_validator("chercheur_ordre",mode='before')
     @classmethod
     def validate_chercheur_ordre(cls,value:str):
         if value is None:
@@ -40,6 +40,6 @@ class LienChercheurRevue(SQLModel,table = True):
             raise ValueError("Cet ordre n'est pas accepté choisissez:first,middle ou last")
         return value.strip().lower()
 
+    
 
-
-from .conference_schemas import PublicationConference
+# from .conference_schemas import PublicationConference
