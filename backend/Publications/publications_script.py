@@ -250,6 +250,28 @@ def get_scimago_ranking(journal_name: str | None, issn_request: str | None, year
 
 
 
+def get_journal_url(url: str | None) -> str | None:
+    if not url:
+        return None
+
+    try:
+        api_url = url.replace("https://openalex.org/", "https://api.openalex.org/")
+        response = requests.get(api_url, timeout=10)
+        response.raise_for_status()  # raises an error for 4xx/5xx responses
+        
+        data = response.json()
+        return data.get("homepage_url")
+
+    except requests.RequestException as e:
+        # Optionally log the error or handle specific cases (timeout, connection error, etc.)
+        print(f"Request failed: {e}")
+        return None
+    except ValueError:
+        # This handles invalid JSON
+        print("Failed to decode JSON response.")
+        return None
+    
+
 
 def get_metadata_from_openalex(doi: str | None,title : str | None) -> dict:
     """
@@ -368,7 +390,7 @@ def fetch_dblp_publications(dblp_url: str):
         primary_location = metadata.get('primary_location',{}) or {}
         source = primary_location.get('source', {}) or {}
         revue = source.get('display_name', None)
-
+        revue_url = get_journal_url(source.get('id',None))
         # Extract ISSN (OpenAlex may have issn_l or issn[])
         issn_request = None
         if 'issn_l' in source:
@@ -413,7 +435,7 @@ def fetch_dblp_publications(dblp_url: str):
             "abstract": metadata.get("abstract", ""),
             "doi": doi,
             "annee_publication": year,
-            "url": oa_url or url,
+            "url": oa_url or url or primary_location.get('landing_page_url',None),
             "is_open_access": metadata.get("open_access", {}).get("is_oa", None),
             "citations":metadata.get('citations')
         }
@@ -426,22 +448,20 @@ def fetch_dblp_publications(dblp_url: str):
             "nom": revue,
             "issn": issn_request,
             "e_issn": revue_data.get("e_issn") if revue_data else None,
-            "url": primary_location.get('landing_page_url',None)
+            "url": revue_url
         }
         conference_data = {
             "nom": revue,
-            "url": primary_location.get('landing_page_url',None)
+            "url": revue_url
         }
 
         # 3️⃣ Ranking data (Scimago + DGRSDT placeholder)
         ranking_data = {
-            "annee": year,
             "scimago_rank": revue_data.get("scimago_rank",None) if revue_data else None,
             "dgrsdt_rank": dgrst_rank,  # placeholder, to be filled later
             "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus')
         }
         conference_ranking = {
-            "annee": year,
             "scimago_rank": revue_data.get("scimago_rank") if revue_data else None,
             "is_scopus_indexed": revue_data.get("is_scopus_indexed") if revue_data else source.get('is_indexed_in_scopus'),
             "core_ranking":core_ranking or None
@@ -458,7 +478,7 @@ def fetch_dblp_publications(dblp_url: str):
     return pubs
 
 def process_researcher_publications(session: Session, researcher: Chercheur):
-    dblp = 'https://dblp.org/pid/390/6784.html'
+    dblp = researcher.dblp_url
     publications = fetch_dblp_publications(dblp_url=dblp)
 
     for publication in publications:
@@ -514,7 +534,7 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
                 session.flush()
                 session.refresh(existing_pub)
 
-            annee = ranking_data.get("annee")
+            annee = pub_data.get("annee_publication")
             if annee:
                 annee = int(annee)
                 revue_ranking = session.exec(
@@ -527,7 +547,7 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
 
                 if not revue_ranking:
                     ranking_base = RevueRankingBase.model_validate(ranking_data)
-                    revue_ranking = RevueRanking(**ranking_base.model_dump(), revue_id = revue.id)
+                    revue_ranking = RevueRanking(**ranking_base.model_dump(), revue_id = revue.id,annee=annee)
                     session.add(revue_ranking)
 
             lien_chercheur_publication = session.exec(
@@ -590,7 +610,7 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
                     session.refresh(existing_pub)
 
             # --- Handle ranking ---
-            annee = ranking_data.get("annee")
+            annee = pub_data.get("annee_publication")
             if annee:
                     annee = int(annee)
             conference_ranking = session.exec(
@@ -603,7 +623,7 @@ def process_researcher_publications(session: Session, researcher: Chercheur):
 
             if not conference_ranking:
                     ranking_base = ConferenceRankingBase.model_validate(ranking_data)
-                    conference_ranking = ConferenceRanking(**ranking_base.model_dump(), conference_id =conference.id)
+                    conference_ranking = ConferenceRanking(**ranking_base.model_dump(), conference_id =conference.id,annee=annee)
                     session.add(conference_ranking)
 
             # --- Link researcher to this publication ---
@@ -661,6 +681,6 @@ def process_all_researchers():
 
 # --- Example usage ---
 if __name__ == "__main__":
-   pass
-
+    print(f"***Failed = {process_all_researchers()}")
+    
   

@@ -44,6 +44,30 @@ class PublicationConference(PublicationConferenceBase,table = True):
     chercheur_links : list[LienChercheurConference] = Relationship(back_populates="publication_conference")
 
 
+class PublicationConferenceCreate(SQLModel):
+    titre: str
+    annee_publication: int
+    abstract : str | None = None
+    doi: str | None = None
+    is_open_access: bool | None = None
+    citations : int | None = Field(...,ge=0)
+    url : str | None = None
+    conference_id: int | None = None
+    chercheur_ordre: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls,value : str | None):
+        if value is None:
+            return None
+        HttpUrl(value)
+        return value
+
+class PublicationConferenceUpdate(PublicationConferenceBase):
+    titre : str | None = None
+
+
+
 class ConferenceBase(SQLModel):
     nom : str 
     acronyme : str | None = None
@@ -68,11 +92,21 @@ class Conference(ConferenceBase,table = True):
 
 
 
-class ConferenceRankingBase(SQLModel):
-    annee : int 
-    core_ranking : CoreRanking | None = None
+class ConferenceUpdate(ConferenceBase):
+    nom : str | None = None
+    acronyme : str | None = None
+    url : str | None = None
+
+class ConferenceRankingBase(SQLModel): 
+    core_ranking : str | None = None
     scimago_rank: ScimagoRanking | None = None
-    is_scopus_indexed : bool | None = False
+    is_scopus_indexed : bool | None = None
+
+
+class ConferenceRanking(ConferenceRankingBase,table = True):
+    conference_id : int | None = Field(default=None,primary_key=True,foreign_key="conference.id",ondelete='CASCADE')
+    annee : int | None = Field(default=None,primary_key=True)
+    conference : Conference = Relationship(back_populates="rankings")
 
     @field_validator("annee")
     @classmethod
@@ -80,12 +114,6 @@ class ConferenceRankingBase(SQLModel):
         if len(str(value)) != 4:
             raise ValueError("Année doit avoir 4 chiffres.")
         return value
-
-class ConferenceRanking(ConferenceRankingBase,table = True):
-    conference_id : int | None = Field(default=None,primary_key=True,foreign_key="conference.id",ondelete='CASCADE')
-    annee : int | None = Field(default=None,primary_key=True)
-    conference : Conference = Relationship(back_populates="rankings")
-
 
 
     __table_args__ = (
@@ -99,4 +127,9 @@ class ConferenceRanking(ConferenceRankingBase,table = True):
         ),
     )
 
+class ConferenceRankingCreate(ConferenceRankingBase):
+    conference_id : int =Field(...)
+    annee : int = Field(...)
 
+class ConferenceRankingUpdate(ConferenceRankingBase):
+    pass
