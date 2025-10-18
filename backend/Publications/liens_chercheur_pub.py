@@ -11,7 +11,7 @@ class LienChercheurConference(SQLModel,table = True):
     chercheur: "Chercheur" = Relationship(back_populates="conference_links")
     publication_conference: "PublicationConference" = Relationship(back_populates="chercheur_links")
 
-    @field_validator("chercheur_ordre")
+    @field_validator("chercheur_ordre",mode='before')
     @classmethod
     def validate_chercheur_ordre(cls,value:str):
         if value is None:
@@ -19,6 +19,8 @@ class LienChercheurConference(SQLModel,table = True):
         if value.strip().lower() not in ['first','middle','last']:
             raise ValueError("Cet ordre n'est pas accepté choisissez:first,middle ou last")
         return value.strip().lower()
+
+
 
 class LienChercheurRevue(SQLModel,table = True):
     chercheur_id: int | None = Field(default=None,foreign_key="chercheur.id", primary_key=True,ondelete='CASCADE')
@@ -31,7 +33,7 @@ class LienChercheurRevue(SQLModel,table = True):
 
 
 
-    @field_validator("chercheur_ordre",mode='before')
+    @field_validator("chercheur_ordre")
     @classmethod
     def validate_chercheur_ordre(cls,value:str):
         if value is None:
@@ -41,5 +43,30 @@ class LienChercheurRevue(SQLModel,table = True):
         return value.strip().lower()
 
     
+
+class LienCreate(SQLModel):
+    chercheur_id : int = Field(...)
+    publication_id : int = Field(...)
+    chercheur_ordre : str | None = None
+
+    @field_validator("chercheur_ordre")
+    @classmethod
+    def validate_chercheur_ordre(cls,value:str):
+        if value is None:
+            return None
+        if value.strip().lower() not in ['first','middle','last']:
+            raise ValueError("Cet ordre n'est pas accepté choisissez:first,middle ou last")
+        return value.strip().lower()
+
+class LienUpdate(SQLModel):
+    chercheur_ordre : str | None = None
+    @field_validator("chercheur_ordre")
+    @classmethod
+    def validate_chercheur_ordre(cls,value:str):
+        if value is None:
+            return None
+        if value.strip().lower() not in ['first','middle','last']:
+            raise ValueError("Cet ordre n'est pas accepté choisissez:first,middle ou last")
+        return value.strip().lower()
 
 # from .conference_schemas import PublicationConference

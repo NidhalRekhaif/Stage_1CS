@@ -59,13 +59,42 @@ class PublicationRevue(PublicationRevueBase,table=True):
     chercheur_links : list [LienChercheurRevue] = Relationship(back_populates="publication_revue")
 
 
+class PublicationRevueCreate(SQLModel):
+    titre: str
+    annee_publication: int
+    abstract : str | None = None
+    doi: str | None = None
+    is_open_access: bool | None = None
+    citations : int | None = Field(...,ge=0)
+    url : str | None = None
+    revue_id: int | None = None
+    chercheur_ordre: str | None = None
+
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls,value : str | None):
+        if value is None:
+            return None
+        HttpUrl(value)
+        return value
+
+class PublicationRevueUpdate(PublicationRevueBase):
+    titre : str | None = None
+
 class RevueBase(SQLModel):
     nom : str
     issn : str | None = Field(default=None,unique=True,index=True)
     e_issn : str | None = Field(default=None,unique=True,index=True)
     url : str | None = None
 
-  
+    @field_validator("url")
+    @classmethod
+    def url_validator(cls,value):
+        if value is None:
+            return None
+        HttpUrl(value)
+        return value
     
     
 
@@ -75,19 +104,20 @@ class Revue(RevueBase,table=True):
     rankings : list["RevueRanking"] = Relationship(back_populates="revue")
 
 
+class RevueUpdate(RevueBase):
+    nom : str | None = None
+    issn : str | None = None
+    e_issn : str | None = None
+    url :str | None = None
 
 class RevueRankingBase(SQLModel):
-    annee : int 
     scimago_rank : ScimagoRanking | None = None
-    dgrsdt_rank : DgrstRanking | None = None
-    is_scopus_indexed : bool | None = False
+    dgrsdt_rank : str | None = None
+    is_scopus_indexed : bool | None = None
 
-    @field_validator("annee")
-    @classmethod
-    def anee_validate(cls,value : int):
-        if len(str(value)) != 4:
-            raise ValueError("Année doit avoir 4 chiffres.")
-        return value
+
+
+
 
 
 class RevueRanking(RevueRankingBase,table = True):
@@ -106,3 +136,19 @@ class RevueRanking(RevueRankingBase,table = True):
         name='validate_dgrsdt_rank',
         ),
     )
+
+    @field_validator("annee")
+    @classmethod
+    def anee_validate(cls,value : int):
+        if len(str(value)) != 4:
+            raise ValueError("Année doit avoir 4 chiffres.")
+        return value
+
+class RevueRankingCreate(RevueRankingBase):
+    annee : int = Field(...,ge=1950)
+    revue_id : int = Field(...)
+
+
+
+class RevueRankingUpdate(RevueRankingBase):
+    pass

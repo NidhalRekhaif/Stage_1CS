@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from Publications.routers import publications_router
+from Publications.routers import publications_router,revue_router,conference_router
 from Chercheurs.routers import chercheurs_router
 from contextlib import asynccontextmanager
 from database import init_db
@@ -14,6 +14,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(publications_router, prefix="/publications")
 app.include_router(chercheurs_router, prefix="/chercheurs")
-
+app.include_router(revue_router,prefix='/revue')
+app.include_router(conference_router,prefix='/conference')
 
 
