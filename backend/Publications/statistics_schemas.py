@@ -1,5 +1,5 @@
-from .conference_schemas import Conference,ConferenceRanking,PublicationConference
-from .revue_schemas import Revue,RevueRanking,PublicationRevue
+from .conference_schemas import Conference,ConferenceRanking,PublicationConference,ConferenceBase,ConferenceRankingBase
+from .revue_schemas import Revue,RevueRanking,PublicationRevue,RevueBase,RevueRankingBase
 from Chercheurs.schemas import Chercheur
 from sqlmodel import SQLModel
 from typing import Optional
@@ -65,3 +65,26 @@ class GlobalStatistics(SQLModel):
 class LabStatistics(SQLModel):
     overview : PublicationStats
     total: int
+
+class Author(SQLModel):
+    nom: str | None = None
+    prenom: str | None = None
+    chercheur_ordre: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PublicationDetailsRevue(SQLModel):
+    revue: RevueBase | None = None
+    ranking: RevueRankingBase| None = None
+    chercheurs: list[Author] = []
+
+    model_config = {"from_attributes": True}
+
+
+class PublicationDetailsConference(SQLModel):
+    conference: ConferenceBase | None = None
+    ranking: ConferenceRankingBase | None = None
+    chercheurs: list[Author] = []
+
+    model_config = {"from_attributes": True}

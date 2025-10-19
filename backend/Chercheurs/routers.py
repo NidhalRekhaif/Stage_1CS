@@ -58,13 +58,46 @@ def delete_labo(session:SessionDep,labo_id : int = Path(...)):
     session.commit()
 
 
-@chercheurs_router.get("/",response_model=list[ChercheurRead])
-def get_chercheurs(session:SessionDep,page : int = Query(1)):
-    page_size = 10
-    result = session.exec(select(Chercheur).offset((page-1)*page_size).limit(page_size)).all()
-    if not result:
-        raise HTTPException(detail="Le chercheur n'existe pas.",status_code=status.HTTP_400_BAD_REQUEST)
-    return result
+@chercheurs_router.get("/", status_code=status.HTTP_200_OK)
+def get_chercheurs(
+    session: SessionDep,
+    nom: str | None = Query(None, description="Filtrer par nom du chercheur"),
+    prenom: str | None = Query(None, description="Filtrer par prénom du chercheur"),
+    labo_id: int | None = Query(None, description="Filtrer par laboratoire ID"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=10),
+):
+    """
+    Récupérer la liste des chercheurs avec filtres facultatifs :
+    - nom
+    - prénom
+    - laboratoire
+    """
+
+    query = select(Chercheur)
+
+    # Apply filters if provided
+    if nom is not None:
+        query = query.where((Chercheur.nom).ilike(f"{nom.lower()}%"))
+    if prenom is not None:
+        query = query.where((Chercheur.prenom).ilike(f"{prenom.lower()}%"))
+    if labo_id is not None:
+        if labo_id == 0:
+            query = query.where(Chercheur.labo_id.is_(None))
+        else:
+            query = query.where(Chercheur.labo_id == labo_id)
+
+    # Pagination
+    offset = (page - 1) * limit
+    chercheurs = session.exec(query.offset(offset).limit(limit)).all()
+
+    if not chercheurs:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun chercheur trouvé.")
+
+    return {'page':page,
+            'limit':limit,
+        'data':chercheurs
+        }
 
 
 
