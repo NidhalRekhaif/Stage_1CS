@@ -1,0 +1,18 @@
+activate the virtual environment:
+venv/Scripts/activate or .venv/Scripts/activate
+
+***********************************************
+
+installing packages or libraries:
+pip install -r requirements.txt
+
+**********************************************
+
+run the server:
+cd backend
+uvicorn main:app --reload
+
+***********************************************
+
+acessing the docs page:
+127.0.0.1:8000/docs
