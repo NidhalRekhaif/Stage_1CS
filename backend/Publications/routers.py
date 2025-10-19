@@ -438,3 +438,6 @@ def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Pat
     session.flush()
     session.refresh(result)
     return result
+
+
+

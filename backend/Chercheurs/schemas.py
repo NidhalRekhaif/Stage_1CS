@@ -138,7 +138,6 @@ class ChercheurCreate(ChercheurBase):
 
 class ChercheurRead(ChercheurBase):
     id : int | None
-    labo:LaboBase | None
 # class DummyBase(SQLModel):
 #     name : str | None = None
 # class Dummy(DummyBase,table=True):

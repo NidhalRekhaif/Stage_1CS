@@ -440,7 +440,7 @@ def fetch_dblp_publications(dblp_url: str):
             "citations":metadata.get('citations')
         }
         researcher_position = {
-            "position":position
+            "chercheur_ordre":position
         }
 
         # 2️⃣ Journal data (matches RevueBase)

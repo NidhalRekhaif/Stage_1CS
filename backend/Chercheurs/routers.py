@@ -11,7 +11,7 @@ chercheurs_router = APIRouter()
 
 
 @chercheurs_router.get("/labos",response_model=list[Labo])
-def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
+def get_labo(session:SessionDep,page : int = Query(1),page_size : int = Query(10),labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
     if labo_name:
         result = session.exec(select(Labo).where(Labo.nom == labo_name)).all()
         if result:
@@ -19,7 +19,7 @@ def get_labo(session:SessionDep,labo_name : str | None = Query(default=None,desc
         else:
             raise HTTPException(detail=f"Labo avec le nom {labo_name} n'existe pas",status_code=status.HTTP_404_NOT_FOUND)
     else:
-        results = session.exec(select(Labo)).all()
+        results = session.exec(select(Labo).offset((page-1)*page_size).limit(page_size)).all()
         return results
     
 
@@ -59,10 +59,11 @@ def delete_labo(session:SessionDep,labo_id : int = Path(...)):
 
 
 @chercheurs_router.get("/",response_model=list[ChercheurRead])
-def get_chercheurs(session:SessionDep):
-    result = session.exec(select(Chercheur))
+def get_chercheurs(session:SessionDep,page : int = Query(1)):
+    page_size = 10
+    result = session.exec(select(Chercheur).offset((page-1)*page_size).limit(page_size)).all()
     if not result:
-        raise HTTPException(detail="Il n'y a pas de chercheurs à ce moment",status_code=status.HTTP_400_BAD_REQUEST)
+        raise HTTPException(detail="Le chercheur n'existe pas.",status_code=status.HTTP_400_BAD_REQUEST)
     return result
 
 
