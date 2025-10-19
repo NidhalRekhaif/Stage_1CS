@@ -8,13 +8,29 @@ from starlette import status
 from .conference_schemas import Conference,ConferenceRanking,PublicationConference,ConferenceBase,ConferenceUpdate,ConferenceRankingCreate,ConferenceRankingUpdate,PublicationConferenceCreate,PublicationConferenceUpdate
 from .revue_schemas import PublicationRevue,RevueRanking,Revue,RevueBase,RevueUpdate,RevueRankingCreate,RevueRankingUpdate,PublicationRevueCreate,PublicationRevueUpdate
 from .liens_chercheur_pub import LienChercheurConference,LienChercheurRevue,LienCreate,LienUpdate
-from .statistics_schemas import GlobalStatistics,PublicationStats,RankingStats,ResearcherStats,LabStatistics,safe_division,safe_value,normalize_distribution
-from sqlalchemy import func
+from .statistics_schemas import GlobalStatistics,PublicationStats,RankingStats,ResearcherStats,LabStatistics,PublicationDetailsRevue,PublicationDetailsConference,Author,safe_division,safe_value,normalize_distribution
+from sqlalchemy import func, join
 from Chercheurs.schemas import Chercheur,Labo
 publications_router = APIRouter() 
 revue_router = APIRouter()
 conference_router = APIRouter()
 statistics_router = APIRouter()
+
+@revue_router.get("/{revue_id}", response_model=Revue)
+def get_revue_by_id(
+    revue_id: int = Path(..., description="ID de la revue"),
+    session: SessionDep = None,
+):
+    revue = session.get(Revue, revue_id)
+    if not revue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Revue avec ID {revue_id} introuvable"
+        )
+    return revue
+
+
+
 
 @revue_router.post('/',response_model = Revue,status_code=status.HTTP_201_CREATED)
 def add_revue(revue : RevueBase,session:SessionDep):
@@ -37,7 +53,7 @@ def add_revue(revue : RevueBase,session:SessionDep):
         raise HTTPException(detail='Revue existe déja dans le systeme',status_code=status.HTTP_400_BAD_REQUEST)
     result = Revue(**revue.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     print(result)
     return result
@@ -53,7 +69,7 @@ def patch_revue(revue_update : RevueUpdate,session: SessionDep,revue_id: int = P
     validated_data = revue_update.model_dump(exclude_unset=True)
     revue.sqlmodel_update(validated_data)
     session.add(revue)
-    session.flush()
+    session.commit()
     session.refresh(revue)
     print(revue)
     return revue
@@ -86,7 +102,7 @@ def add_revue_ranking(ranking:RevueRankingCreate,session:SessionDep):
         raise HTTPException(detail="Le ranking existe déja.",status_code=status.HTTP_400_BAD_REQUEST)
     result = RevueRanking(**ranking.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
     
@@ -100,7 +116,7 @@ def patch_ranking(revue:RevueRankingUpdate,session:SessionDep,revue_id : int = P
     validated_data = revue.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -114,7 +130,18 @@ def delete_revue_ranking(session : SessionDep,revue_id : int = Path(...),annee :
     session.commit()
 
 
-
+@conference_router.get("/{conference_id}", response_model=Conference)
+def get_conference_by_id(
+    conference_id: int = Path(..., description="ID de la conférence"),
+    session: SessionDep = None,
+):
+    conference = session.get(Conference, conference_id)
+    if not conference:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conférence avec ID {conference_id} introuvable"
+        )
+    return conference
 
 @conference_router.post('/',response_model=Conference,status_code=status.HTTP_201_CREATED)
 def add_conference(conference : ConferenceBase,session:SessionDep):
@@ -131,7 +158,7 @@ def add_conference(conference : ConferenceBase,session:SessionDep):
         raise HTTPException(detail = "Conference existe déja.",status_code=status.HTTP_400_BAD_REQUEST)
     result = Conference(**conference.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     print(result)
     return result
@@ -144,7 +171,7 @@ def patch_conference(conference : ConferenceUpdate,session : SessionDep,conferen
     validated_data = conference.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     print(result)
     return result
@@ -180,7 +207,7 @@ def add_conference_ranking(ranking:ConferenceRankingCreate,session:SessionDep):
         raise HTTPException(detail="Le ranking existe déja.",status_code=status.HTTP_400_BAD_REQUEST)
     result = ConferenceRanking(**ranking.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -193,7 +220,7 @@ def patch_conference_ranking(ranking:ConferenceRankingUpdate,session:SessionDep,
     validated_data = ranking.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -245,11 +272,11 @@ def add_publication_revue(session:SessionDep,publication_revue : PublicationRevu
        raise HTTPException(detail="La publication existe déja.",status_code=status.HTTP_400_BAD_REQUEST)
     publication = PublicationRevue(**publication_revue.model_dump())
     session.add(publication)
-    session.flush()
+    session.commit()
     session.refresh(publication)
     link = LienChercheurRevue(chercheur_id=chercheur_id,chercheur_ordre=publication_revue.chercheur_ordre,publication_id=publication.id)
     session.add(link)
-    session.flush()
+    session.commit()
     session.refresh(link)
     return publication    
 
@@ -266,7 +293,7 @@ def patch_publication_revue(publication:PublicationRevueUpdate,session:SessionDe
     validated_data = publication.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -289,6 +316,177 @@ def delete_publication(session: SessionDep, publication_id: int = Path(...)):
     session.delete(result)
     session.commit()
 
+
+@publications_router.get(
+    "/revue/{publication_id}",
+    response_model=PublicationDetailsRevue,
+    status_code=status.HTTP_200_OK
+)
+def get_revue_publication_details(publication_id: int, session: SessionDep):
+    """
+    Fetch publication details for a Revue:
+    - Associated revue info
+    - Ranking of the revue for the publication's year
+    - Authors with their order
+    """
+    # 1️⃣ Get the publication itself
+    publication = session.get(PublicationRevue, publication_id)
+    if not publication:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publication not found")
+
+    # 2️⃣ Fetch revue info
+    revue = session.get(Revue, publication.revue_id)
+
+    # 3️⃣ Fetch ranking (for the same year)
+    ranking = session.exec(
+        select(RevueRanking)
+        .where(
+            (RevueRanking.revue_id == publication.revue_id)
+            & (RevueRanking.annee == publication.annee_publication)
+        )
+    ).first()
+
+    # 4️⃣ Fetch authors and their order from LienChercheurRevue
+    author_links = session.exec(
+        select(
+            Chercheur.nom,
+            Chercheur.prenom,
+            LienChercheurRevue.chercheur_ordre
+        ).select_from(join(Chercheur,LienChercheurRevue, LienChercheurRevue.chercheur_id == Chercheur.id))
+        .where(LienChercheurRevue.publication_id == publication_id)
+    ).all()
+
+    # Convert authors to Author schema
+    authors = [
+        Author(nom=nom, prenom=prenom, chercheur_ordre=ordre)
+        for nom, prenom, ordre in author_links
+    ]
+
+    # 5️⃣ Build response
+    return PublicationDetailsRevue(
+        revue=revue,
+        ranking=ranking,
+        chercheurs=authors
+    )
+
+
+
+@publications_router.get(
+    "/conference/{publication_id}",
+    response_model=PublicationDetailsConference,
+    status_code=status.HTTP_200_OK
+)
+def get_conference_publication_details(publication_id: int, session: SessionDep):
+
+ # 1️⃣ Get the publication itself
+    publication = session.get(PublicationConference, publication_id)
+    if not publication:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publication not found")
+
+    conference = session.get(Conference, publication.conference_id)
+    ranking = session.exec(
+        select(ConferenceRanking)
+        .where(
+            (ConferenceRanking.conference_id == publication.conference_id)
+            & (ConferenceRanking.annee == publication.annee_publication)
+        )
+    ).first()
+
+    author_links = session.exec(
+        select(
+            Chercheur.nom,
+            Chercheur.prenom,
+            LienChercheurConference.chercheur_ordre
+        ).select_from(join(Chercheur,LienChercheurConference, LienChercheurConference.chercheur_id == Chercheur.id))
+        .where(LienChercheurConference.publication_id == publication_id)
+    ).all()
+
+    authors = [
+        Author(nom=nom, prenom=prenom, chercheur_ordre=ordre)
+        for nom, prenom, ordre in author_links
+    ]
+
+    return PublicationDetailsConference(
+        conference=conference,
+        ranking=ranking,
+        chercheurs=authors
+    )
+
+
+
+
+
+@publications_router.get("/revue",status_code=status.HTTP_200_OK)
+def get_revue_publications(
+    session: SessionDep,
+    titre: str | None = Query(None, description="Recherche par titre partiel"),
+    doi: str | None = Query(None, description="Recherche par DOI exact"),
+    annee_publication: int | None = Query(None, description="Filtrer par année"),
+    is_open_access: bool | None = Query(None, description="Filtrer par accès ouvert"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=10)
+):
+   
+    
+    offset = (page - 1) * limit
+
+    # --------------------------
+    # Publications de revue
+    # --------------------------
+    
+    query = select(PublicationRevue)
+
+    if titre:
+            query = query.where(PublicationRevue.titre.ilike(f"%{titre}%"))
+    if doi:
+            query = query.where(PublicationRevue.doi == doi)
+    if annee_publication:
+            query = query.where(PublicationRevue.annee_publication == annee_publication)
+    if is_open_access is not None:
+            query = query.where(PublicationRevue.is_open_access == is_open_access)
+
+    revue_results = session.exec(query.offset(offset).limit(limit)).all()
+    return{
+        'page':page,
+        'limit':limit,
+        'data':revue_results
+    } 
+
+
+@publications_router.get("/conference",status_code=status.HTTP_200_OK)
+def get_conference_publications(
+    session: SessionDep,
+    titre: str | None = Query(None, description="Recherche par titre partiel"),
+    doi: str | None = Query(None, description="Recherche par DOI exact"),
+    annee_publication: int | None = Query(None, description="Filtrer par année"),
+    is_open_access: bool | None = Query(None, description="Filtrer par accès ouvert"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=10)
+):
+   
+    
+    offset = (page - 1) * limit
+
+    # --------------------------
+    # Publications de revue
+    # --------------------------
+    
+    query = select(PublicationConference)
+
+    if titre:
+            query = query.where(PublicationConference.titre.ilike(f"%{titre}%"))
+    if doi:
+            query = query.where(PublicationConference.doi == doi)
+    if annee_publication:
+            query = query.where(PublicationConference.annee_publication == annee_publication)
+    if is_open_access is not None:
+            query = query.where(PublicationConference.is_open_access == is_open_access)
+
+    conference_results = session.exec(query.offset(offset).limit(limit)).all()
+    return {
+        'page':page,
+        'limit':limit,
+        'data':conference_results}
 
 
 
@@ -326,11 +524,11 @@ def add_publication_conference(session:SessionDep,publication_conference : Publi
        raise HTTPException(detail="La publication existe déja.",status_code=status.HTTP_400_BAD_REQUEST)
     publication = PublicationConference(**publication_conference.model_dump())
     session.add(publication)
-    session.flush()
+    session.commit()
     session.refresh(publication)
     link = LienChercheurConference(chercheur_id=chercheur_id,chercheur_ordre=publication_conference.chercheur_ordre,publication_id=publication.id)
     session.add(link)
-    session.flush()
+    session.commit()
     session.refresh(link)
     return publication  
 
@@ -345,7 +543,7 @@ def patch_publication_revue(publication:PublicationConferenceUpdate,session:Sess
     validated_data = publication.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -379,7 +577,7 @@ def add_link_revue(link:LienCreate,session:SessionDep):
         raise HTTPException(detail="Publication n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
     result = LienChercheurRevue(**link.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return link
 
@@ -400,7 +598,7 @@ def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Pat
     validated_data = link.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
@@ -417,7 +615,7 @@ def add_link_revue(link:LienCreate,session:SessionDep):
         raise HTTPException(detail="Publication n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
     result = LienChercheurConference(**link.model_dump())
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return link
 
@@ -437,7 +635,7 @@ def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Pat
     validated_data = link.model_dump(exclude_unset=True)
     result.sqlmodel_update(validated_data)
     session.add(result)
-    session.flush()
+    session.commit()
     session.refresh(result)
     return result
 
