@@ -8,11 +8,13 @@ from starlette import status
 from .conference_schemas import Conference,ConferenceRanking,PublicationConference,ConferenceBase,ConferenceUpdate,ConferenceRankingCreate,ConferenceRankingUpdate,PublicationConferenceCreate,PublicationConferenceUpdate
 from .revue_schemas import PublicationRevue,RevueRanking,Revue,RevueBase,RevueUpdate,RevueRankingCreate,RevueRankingUpdate,PublicationRevueCreate,PublicationRevueUpdate
 from .liens_chercheur_pub import LienChercheurConference,LienChercheurRevue,LienCreate,LienUpdate
+from .statistics_schemas import GlobalStatistics,PublicationStats,RankingStats,ResearcherStats,LabStatistics,safe_division,safe_value,normalize_distribution
 from sqlalchemy import func
-from Chercheurs.schemas import Chercheur
+from Chercheurs.schemas import Chercheur,Labo
 publications_router = APIRouter() 
 revue_router = APIRouter()
 conference_router = APIRouter()
+statistics_router = APIRouter()
 
 @revue_router.post('/',response_model = Revue,status_code=status.HTTP_201_CREATED)
 def add_revue(revue : RevueBase,session:SessionDep):
@@ -439,5 +441,484 @@ def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Pat
     session.refresh(result)
     return result
 
+@statistics_router.get(
+    "/global",
+    response_model=GlobalStatistics,
+    status_code=status.HTTP_200_OK
+)
+def get_global_statistics(session:SessionDep):
+    """
+    Get global statistics overview:
+    - Publications (total, by type, open access, rankings)
+    - Researchers (total, with/without lab)
+    """
+
+    # -----------------------
+    #   Publications Counts
+    # -----------------------
+    total_revue = safe_value(session.exec(select(func.count()).select_from(PublicationRevue)).one())
+    total_conf = safe_value(session.exec(select(func.count()).select_from(PublicationConference)).one())
+    total_publications = total_revue + total_conf
+
+    # -----------------------
+    #   Open Access Ratio
+    # -----------------------
+    open_revue = safe_value(session.exec(
+        select(func.count()).select_from(PublicationRevue).where(PublicationRevue.is_open_access == True)
+    ).one())
+    open_conf = safe_value(session.exec(
+        select(func.count()).select_from(PublicationConference).where(PublicationConference.is_open_access == True)
+    ).one())
+    open_access_count = open_revue + open_conf
+
+    unknown_revue = safe_value(session.exec(
+        select(func.count()).select_from(PublicationRevue).where(PublicationRevue.is_open_access == None)
+    ).one())
+    unknown_conf = safe_value(session.exec(
+        select(func.count()).select_from(PublicationConference).where(PublicationConference.is_open_access == None)
+    ).one())
+    unknown_open_access_count = unknown_revue + unknown_conf
+
+    known_open_status = total_publications - unknown_open_access_count
+    open_access_ratio = safe_division(open_access_count, known_open_status)
+
+
+    # -----------------------
+    #   Rankings Distributions
+    # -----------------------
+
+    # Scimago (for journals)
+    scimago_pub_rows = session.exec(
+    select(
+        RevueRanking.scimago_rank,
+        func.count(PublicationRevue.id)
+    )
+    .join(
+        RevueRanking,
+        (PublicationRevue.revue_id == RevueRanking.revue_id)
+        & (PublicationRevue.annee_publication == RevueRanking.annee),
+        isouter=True
+    )
+    .group_by(RevueRanking.scimago_rank)
+    ).all()
+    scimago_distribution = normalize_distribution(scimago_pub_rows)
+
+    # DGRSDT (for journals)
+    dgrsdt_pub_rows = session.exec(
+    select(
+        RevueRanking.dgrsdt_rank, 
+        func.count(PublicationRevue.id)
+    )
+    .join(
+        RevueRanking,
+        (PublicationRevue.revue_id == RevueRanking.revue_id)
+        & (PublicationRevue.annee_publication == RevueRanking.annee),
+        isouter=True
+    )
+    .group_by(RevueRanking.dgrsdt_rank)
+        ).all()
+    dgrsdt_distribution = normalize_distribution(dgrsdt_pub_rows)
+
+    # CORE (for conferences)
+    core_pub_rows = session.exec(
+    select(
+        ConferenceRanking.core_ranking,
+        func.count(PublicationConference.id)
+    )
+    .join(
+        ConferenceRanking,
+        (PublicationConference.conference_id == ConferenceRanking.conference_id)
+        & (PublicationConference.annee_publication == ConferenceRanking.annee),
+        isouter=True
+    )
+    .group_by(ConferenceRanking.core_ranking)
+        ).all()
+    core_distribution = normalize_distribution(core_pub_rows)
+
+
+    # -----------------------
+    #   Researchers
+    # -----------------------
+    total_researchers = safe_value(session.exec(select(func.count()).select_from(Chercheur)).one())
+    researchers_with_lab = safe_value(session.exec(
+        select(func.count()).select_from(Chercheur).where(Chercheur.labo_id != None)
+    ).one())
+    researchers_without_lab = total_researchers - researchers_with_lab
+
+    # -----------------------
+    #   Response
+    # -----------------------
+    return GlobalStatistics(
+        overview=PublicationStats(
+            total_publications=total_publications,
+            publications_by_type={
+                "revue": total_revue,
+                "conference": total_conf
+            },
+            open_access={
+                "open_access_count": open_access_count,
+                "unknown_open_access_count": unknown_open_access_count,
+                "ratio": open_access_ratio
+            },
+            
+            rankings=RankingStats(
+                scimago_distribution=scimago_distribution,
+                dgrsdt_distribution=dgrsdt_distribution,
+                core_distribution=core_distribution
+            )
+        ),
+        researchers=ResearcherStats(
+            total=total_researchers,
+            with_lab=researchers_with_lab,
+            without_lab=researchers_without_lab,
+        )
+    )
+
+
+
+
+
+
+
+
+
+
+@statistics_router.get(
+    "/chercheur/{chercheur_id}",
+    response_model=PublicationStats,
+    status_code=status.HTTP_200_OK
+)
+def get_researcher_statistics(chercheur_id: int, session: SessionDep):
+    """
+    Get statistics for a specific researcher:
+    - Publications (total, by type, open access)
+    - Indexed and ranked publications
+    """
+    chercheur = session.get(Chercheur,chercheur_id)
+    if not chercheur:
+        raise HTTPException(detail="Chercheur n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
+    # -----------------------
+    #   Publications Counts
+    # -----------------------
+    total_revue = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .where(LienChercheurRevue.chercheur_id == chercheur_id)
+    ).one())
+
+    total_conf = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .where(LienChercheurConference.chercheur_id == chercheur_id)
+    ).one())
+
+    total_publications = total_revue + total_conf
+
+
+    # -----------------------
+    #   Open Access Ratio
+    # -----------------------
+    open_revue = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .where((LienChercheurRevue.chercheur_id == chercheur_id) &
+               (PublicationRevue.is_open_access == True))
+    ).one())
+
+    open_conf = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .where((LienChercheurConference.chercheur_id == chercheur_id) &
+               (PublicationConference.is_open_access == True))
+    ).one())
+
+    open_access_count = open_revue + open_conf
+
+    unknown_revue = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .where((LienChercheurRevue.chercheur_id == chercheur_id) &
+               (PublicationRevue.is_open_access == None))
+    ).one())
+
+    unknown_conf = safe_value(session.exec(
+        select(func.count())
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .where((LienChercheurConference.chercheur_id == chercheur_id) &
+               (PublicationConference.is_open_access == None))
+    ).one())
+
+    unknown_open_access_count = unknown_revue + unknown_conf
+    known_open_status = total_publications - unknown_open_access_count
+    open_access_ratio = safe_division(open_access_count, known_open_status)
+
+
+    # -----------------------
+    #   Rankings Distributions
+    # -----------------------
+
+    # Scimago (for journals)
+    scimago_pub_rows = session.exec(
+        select(
+            RevueRanking.scimago_rank,
+            func.count(PublicationRevue.id)
+        )
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(
+            RevueRanking,
+            (PublicationRevue.revue_id == RevueRanking.revue_id)
+            & (PublicationRevue.annee_publication == RevueRanking.annee),
+            isouter=True
+        )
+        .where(LienChercheurRevue.chercheur_id == chercheur_id)
+        .group_by(RevueRanking.scimago_rank)
+    ).all()
+    scimago_distribution = normalize_distribution(scimago_pub_rows)
+
+
+    # DGRSDT (for journals)
+    dgrsdt_pub_rows = session.exec(
+        select(
+            RevueRanking.dgrsdt_rank,
+            func.count(PublicationRevue.id)
+        )
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(
+            RevueRanking,
+            (PublicationRevue.revue_id == RevueRanking.revue_id)
+            & (PublicationRevue.annee_publication == RevueRanking.annee),
+            isouter=True
+        )
+        .where(LienChercheurRevue.chercheur_id == chercheur_id)
+        .group_by(RevueRanking.dgrsdt_rank)
+    ).all()
+    dgrsdt_distribution = normalize_distribution(dgrsdt_pub_rows)
+
+
+    # CORE (for conferences)
+    core_pub_rows = session.exec(
+        select(
+            ConferenceRanking.core_ranking,
+            func.count(PublicationConference.id)
+        )
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .join(
+            ConferenceRanking,
+            (PublicationConference.conference_id == ConferenceRanking.conference_id)
+            & (PublicationConference.annee_publication == ConferenceRanking.annee),
+            isouter=True
+        )
+        .where(LienChercheurConference.chercheur_id == chercheur_id)
+        .group_by(ConferenceRanking.core_ranking)
+    ).all()
+    core_distribution = normalize_distribution(core_pub_rows)
+
+
+    # -----------------------
+    #   Response
+    # -----------------------
+    return PublicationStats(
+        total_publications=total_publications,
+        publications_by_type={
+            "revue": total_revue,
+            "conference": total_conf
+        },
+        open_access={
+            "open_access_count": open_access_count,
+            "unknown_open_access_count": unknown_open_access_count,
+            "ratio": open_access_ratio
+        },
+        rankings=RankingStats(
+            scimago_distribution=scimago_distribution,
+            dgrsdt_distribution=dgrsdt_distribution,
+            core_distribution=core_distribution
+        )
+    )
+
+
+
+
+@statistics_router.get(
+    "/labo/{labo_id}",
+    response_model=LabStatistics,  # define this similar to GlobalStatistics
+    status_code=status.HTTP_200_OK
+)
+def get_lab_statistics(labo_id: int, session: SessionDep):
+    """
+    Get statistics for a specific lab:
+    - Total researchers
+    - Publications (total, by type, open access)
+    - Indexed and ranked publications
+    """
+    labo = session.get(Labo, labo_id)
+    if not labo:
+        raise HTTPException(detail="Laboratoire n'existe pas.", status_code=status.HTTP_404_NOT_FOUND)
+
+    # -----------------------
+    #   Researchers
+    # -----------------------
+    total_researchers = safe_value(session.exec(
+        select(func.count()).select_from(Chercheur).where(Chercheur.labo_id == labo_id)
+    ).one())
+
+    # -----------------------
+    #   Publications Counts
+    # -----------------------
+    total_revue = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationRevue.id)))
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(Chercheur, Chercheur.id == LienChercheurRevue.chercheur_id)
+        .where(Chercheur.labo_id == labo_id)
+    ).one())
+
+    total_conf = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationConference.id)))
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .join(Chercheur, Chercheur.id == LienChercheurConference.chercheur_id)
+        .where(Chercheur.labo_id == labo_id)
+    ).one())
+
+    total_publications = total_revue + total_conf
+
+
+    # -----------------------
+    #   Open Access Ratio
+    # -----------------------
+    open_revue = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationRevue.id)))
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(Chercheur, Chercheur.id == LienChercheurRevue.chercheur_id)
+        .where((Chercheur.labo_id == labo_id) & (PublicationRevue.is_open_access == True))
+    ).one())
+
+    open_conf = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationConference.id)))
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .join(Chercheur, Chercheur.id == LienChercheurConference.chercheur_id)
+        .where((Chercheur.labo_id == labo_id) & (PublicationConference.is_open_access == True))
+    ).one())
+
+    open_access_count = open_revue + open_conf
+
+    unknown_revue = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationRevue.id)))
+        .select_from(PublicationRevue)
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(Chercheur, Chercheur.id == LienChercheurRevue.chercheur_id)
+        .where((Chercheur.labo_id == labo_id) & (PublicationRevue.is_open_access == None))
+    ).one())
+
+    unknown_conf = safe_value(session.exec(
+        select(func.count(func.distinct(PublicationConference.id)))
+        .select_from(PublicationConference)
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .join(Chercheur, Chercheur.id == LienChercheurConference.chercheur_id)
+        .where((Chercheur.labo_id == labo_id) & (PublicationConference.is_open_access == None))
+    ).one())
+
+    unknown_open_access_count = unknown_revue + unknown_conf
+    known_open_status = total_publications - unknown_open_access_count
+    open_access_ratio = safe_division(open_access_count, known_open_status)
+
+
+    # -----------------------
+    #   Rankings Distributions
+    # -----------------------
+
+    # Scimago (for journals)
+    scimago_pub_rows = session.exec(
+        select(
+            RevueRanking.scimago_rank,
+            func.count(func.distinct(PublicationRevue.id))
+        )
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(Chercheur, Chercheur.id == LienChercheurRevue.chercheur_id)
+        .join(
+            RevueRanking,
+            (PublicationRevue.revue_id == RevueRanking.revue_id)
+            & (PublicationRevue.annee_publication == RevueRanking.annee),
+            isouter=True
+        )
+        .where(Chercheur.labo_id == labo_id)
+        .group_by(RevueRanking.scimago_rank)
+    ).all()
+    scimago_distribution = normalize_distribution(scimago_pub_rows)
+
+
+    # DGRSDT (for journals)
+    dgrsdt_pub_rows = session.exec(
+        select(
+            RevueRanking.dgrsdt_rank,
+            func.count(func.distinct(PublicationRevue.id))
+        )
+        .join(LienChercheurRevue, LienChercheurRevue.publication_id == PublicationRevue.id)
+        .join(Chercheur, Chercheur.id == LienChercheurRevue.chercheur_id)
+        .join(
+            RevueRanking,
+            (PublicationRevue.revue_id == RevueRanking.revue_id)
+            & (PublicationRevue.annee_publication == RevueRanking.annee),
+            isouter=True
+        )
+        .where(Chercheur.labo_id == labo_id)
+        .group_by(RevueRanking.dgrsdt_rank)
+    ).all()
+    dgrsdt_distribution = normalize_distribution(dgrsdt_pub_rows)
+
+
+    # CORE (for conferences)
+    core_pub_rows = session.exec(
+        select(
+            ConferenceRanking.core_ranking,
+            func.count(func.distinct(PublicationConference.id))
+        )
+        .join(LienChercheurConference, LienChercheurConference.publication_id == PublicationConference.id)
+        .join(Chercheur, Chercheur.id == LienChercheurConference.chercheur_id)
+        .join(
+            ConferenceRanking,
+            (PublicationConference.conference_id == ConferenceRanking.conference_id)
+            & (PublicationConference.annee_publication == ConferenceRanking.annee),
+            isouter=True
+        )
+        .where(Chercheur.labo_id == labo_id)
+        .group_by(ConferenceRanking.core_ranking)
+    ).all()
+    core_distribution = normalize_distribution(core_pub_rows)
+
+
+    # -----------------------
+    #   Response
+    # -----------------------
+    return LabStatistics(
+        overview=PublicationStats(
+            total_publications=total_publications,
+            publications_by_type={
+                "revue": total_revue,
+                "conference": total_conf
+            },
+            open_access={
+                "open_access_count": open_access_count,
+                "unknown_open_access_count": unknown_open_access_count,
+                "ratio": open_access_ratio
+            },
+            rankings=RankingStats(
+                scimago_distribution=scimago_distribution,
+                dgrsdt_distribution=dgrsdt_distribution,
+                core_distribution=core_distribution
+            )
+        ),
+        
+        total=total_researchers
+        
+    )
 
 
