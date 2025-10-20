@@ -435,7 +435,6 @@ def get_revue_publications(
     # --------------------------
     
     query = select(PublicationRevue)
-
     if titre:
             query = query.where(PublicationRevue.titre.ilike(f"%{titre}%"))
     if doi:
@@ -445,8 +444,11 @@ def get_revue_publications(
     if is_open_access is not None:
             query = query.where(PublicationRevue.is_open_access == is_open_access)
 
+
+    count = session.exec(select(func.count()).select_from(query.subquery())).one()
     revue_results = session.exec(query.offset(offset).limit(limit)).all()
     return{
+        'total':count,
         'page':page,
         'limit':limit,
         'data':revue_results
@@ -472,7 +474,7 @@ def get_conference_publications(
     # --------------------------
     
     query = select(PublicationConference)
-
+    
     if titre:
             query = query.where(PublicationConference.titre.ilike(f"%{titre}%"))
     if doi:
@@ -482,8 +484,11 @@ def get_conference_publications(
     if is_open_access is not None:
             query = query.where(PublicationConference.is_open_access == is_open_access)
 
+
+    count = session.exec(select(func.count()).select_from(query.subquery())).one()
     conference_results = session.exec(query.offset(offset).limit(limit)).all()
     return {
+        'total':count,
         'page':page,
         'limit':limit,
         'data':conference_results}

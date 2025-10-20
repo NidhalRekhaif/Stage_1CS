@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from database import SessionDep
 from .schemas import Chercheur,LaboBase,Labo,ChercheurUpdate,ChercheurBase,ChercheurCreate,ChercheurRead,LaboUpdate
 from sqlmodel import select
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException,Query,Response,Path
@@ -10,8 +11,8 @@ chercheurs_router = APIRouter()
 
 
 
-@chercheurs_router.get("/labos",response_model=list[Labo])
-def get_labo(session:SessionDep,page : int = Query(1),page_size : int = Query(10),labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
+@chercheurs_router.get("/labos",)
+def get_labo(session:SessionDep,page : int = Query(1),limit : int = Query(10),labo_name : str | None = Query(default=None,description="Le nom de laboratoire à chercher",example="LCSI")):
     if labo_name:
         result = session.exec(select(Labo).where(Labo.nom == labo_name)).all()
         if result:
@@ -19,8 +20,14 @@ def get_labo(session:SessionDep,page : int = Query(1),page_size : int = Query(10
         else:
             raise HTTPException(detail=f"Labo avec le nom {labo_name} n'existe pas",status_code=status.HTTP_404_NOT_FOUND)
     else:
-        results = session.exec(select(Labo).offset((page-1)*page_size).limit(page_size)).all()
-        return results
+        results = session.exec(select(Labo).offset((page-1)*limit).limit(limit)).all()
+        count = session.exec(select(func.count(Labo.id))).one()
+        return {
+        'total':count,
+        'page':page,
+        'limit':limit,
+        'data':results
+        }
     
 
 
@@ -75,6 +82,7 @@ def get_chercheurs(
     """
 
     query = select(Chercheur)
+     
 
     # Apply filters if provided
     if nom is not None:
@@ -89,13 +97,17 @@ def get_chercheurs(
 
     # Pagination
     offset = (page - 1) * limit
+
+    count = session.exec(select(func.count()).select_from(query.subquery())).one()
     chercheurs = session.exec(query.offset(offset).limit(limit)).all()
 
     if not chercheurs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun chercheur trouvé.")
 
-    return {'page':page,
-            'limit':limit,
+    return {
+        'total':count,
+        'page':page,
+        'limit':limit,
         'data':chercheurs
         }
 
