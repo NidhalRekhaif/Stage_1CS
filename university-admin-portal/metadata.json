@@ -1,0 +1,5 @@
+{
+  "name": "University Admin Portal",
+  "description": "A dark-themed administrative dashboard for managing university researchers, publications, and viewing statistical analytics.",
+  "requestFramePermissions": []
+}
