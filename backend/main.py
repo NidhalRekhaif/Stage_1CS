@@ -38,4 +38,3 @@ app.include_router(chercheurs_router, prefix="/chercheurs")
 app.include_router(revue_router,prefix='/revue')
 app.include_router(conference_router,prefix='/conference')
 app.include_router(statistics_router,prefix='/statistics')
-
