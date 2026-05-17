@@ -1,15 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MOCK_RESEARCHERS } from '../constants';
-import { Pencil, Globe, BookOpen } from 'lucide-react';
+import { Pencil, Globe, BookOpen, Loader } from 'lucide-react';
+import { ChercheurApi } from '../api/ChercheurApi';
 
 const ResearcherProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  // Safe cast for mock finding
-  const researcher = MOCK_RESEARCHERS.data.find(r => r.id === Number(id));
+  const [researcher, setResearcher] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!researcher) return <div className="text-white">Researcher not found</div>;
+  useEffect(() => {
+    const fetchResearcher = async () => {
+      try {
+        if (id) {
+          const data = await ChercheurApi.getById(Number(id));
+          setResearcher(data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load researcher');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchResearcher();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader className="animate-spin text-blue-500" size={40} />
+      </div>
+    );
+  }
+
+  if (error) return <div className="text-red-500">Error: {error}</div>;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">

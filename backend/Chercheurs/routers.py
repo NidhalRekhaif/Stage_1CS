@@ -43,7 +43,7 @@ def add_labo(labo:LaboBase,session:SessionDep):
     return JSONResponse(content={'message':'sucess'},status_code=status.HTTP_201_CREATED)
 
 
-@chercheurs_router.patch("/labos{labo_id}",response_model=Labo)
+@chercheurs_router.patch("/labos/{labo_id}",response_model=Labo)
 def patch_labo(session : SessionDep,labo : LaboUpdate,labo_id: int = Path(...,description="Le id de labo à modifier",example=1)):
     labo_db = session.get(Labo,labo_id)
     if not labo_db:
@@ -56,7 +56,7 @@ def patch_labo(session : SessionDep,labo : LaboUpdate,labo_id: int = Path(...,de
     return labo_db
 
 
-@chercheurs_router.delete("/labos{labo_id}",status_code=status.HTTP_204_NO_CONTENT)
+@chercheurs_router.delete("/labos/{labo_id}",status_code=status.HTTP_204_NO_CONTENT)
 def delete_labo(session:SessionDep,labo_id : int = Path(...)):
     labo_db = session.get(Labo,labo_id)
     if not labo_db:
@@ -72,7 +72,7 @@ def get_chercheurs(
     prenom: str | None = Query(None, description="Filtrer par prénom du chercheur"),
     labo_id: int | None = Query(None, description="Filtrer par laboratoire ID"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=10),
+    limit: int = Query(10, ge=1, le=100),
 ):
     """
     Récupérer la liste des chercheurs avec filtres facultatifs :
@@ -121,6 +121,16 @@ def create_chercheur(chercheur: ChercheurCreate, session: SessionDep):
     session.refresh(db_chercheur)
     return db_chercheur
 
+
+@chercheurs_router.get("/{chercheur_id}", response_model=Chercheur)
+def get_chercheur(session: SessionDep, chercheur_id: int = Path(...)):
+    """
+    Get a single chercheur by ID
+    """
+    chercheur = session.get(Chercheur, chercheur_id)
+    if not chercheur:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chercheur introuvable.")
+    return chercheur
 
 
 @chercheurs_router.patch("/{chercheur_id}",response_model=ChercheurBase)

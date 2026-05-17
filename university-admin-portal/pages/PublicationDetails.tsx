@@ -1,13 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MOCK_PUBLICATIONS } from '../constants';
-import { Pencil, Lock, LockOpen, ExternalLink } from 'lucide-react';
+import { Pencil, Lock, LockOpen, ExternalLink, Loader } from 'lucide-react';
+import { PublicationApi, Publication } from '../api/PublicationApi';
 
 const PublicationDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const publication = MOCK_PUBLICATIONS.data.find(p => p.id === Number(id));
+  const [publication, setPublication] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const fetchPublication = async () => {
+      try {
+        if (id) {
+          const data = await PublicationApi.getById(Number(id));
+          setPublication(data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load publication');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPublication();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader className="animate-spin text-blue-500" size={40} />
+      </div>
+    );
+  }
+
+  if (error) return <div className="text-red-500">Error: {error}</div>;
   if (!publication) return <div className="text-white">Publication not found</div>;
 
   return (
