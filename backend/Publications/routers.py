@@ -16,10 +16,91 @@ revue_router = APIRouter()
 conference_router = APIRouter()
 statistics_router = APIRouter()
 
+@publications_router.get("/", status_code=status.HTTP_200_OK)
+def get_all_publications(
+    session: SessionDep,
+    titre: str | None = Query(None, description="Recherche par titre partiel"),
+    doi: str | None = Query(None, description="Recherche par DOI exact"),
+    annee_publication: int | None = Query(None, description="Filtrer par année"),
+    is_open_access: bool | None = Query(None, description="Filtrer par accès ouvert"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
+    """
+    Get all publications (both revue and conference) combined
+    """
+    offset = (page - 1) * limit
+
+    # Get revue publications
+    revue_query = select(PublicationRevue)
+    if titre:
+        revue_query = revue_query.where(PublicationRevue.titre.ilike(f"%{titre}%"))
+    if doi:
+        revue_query = revue_query.where(PublicationRevue.doi == doi)
+    if annee_publication:
+        revue_query = revue_query.where(PublicationRevue.annee_publication == annee_publication)
+    if is_open_access is not None:
+        revue_query = revue_query.where(PublicationRevue.is_open_access == is_open_access)
+
+    revue_count = session.exec(select(func.count()).select_from(revue_query.subquery())).one()
+    revue_results = session.exec(revue_query.offset(offset).limit(limit)).all()
+
+    # Get conference publications
+    conf_query = select(PublicationConference)
+    if titre:
+        conf_query = conf_query.where(PublicationConference.titre.ilike(f"%{titre}%"))
+    if doi:
+        conf_query = conf_query.where(PublicationConference.doi == doi)
+    if annee_publication:
+        conf_query = conf_query.where(PublicationConference.annee_publication == annee_publication)
+    if is_open_access is not None:
+        conf_query = conf_query.where(PublicationConference.is_open_access == is_open_access)
+
+    conf_count = session.exec(select(func.count()).select_from(conf_query.subquery())).one()
+    conf_results = session.exec(conf_query.offset(offset).limit(limit)).all()
+
+    # Combine results
+    all_publications = list(revue_results) + list(conf_results)
+    total_count = revue_count + conf_count
+
+    if not all_publications and total_count == 0:
+        return {
+            'total': 0,
+            'page': page,
+            'limit': limit,
+            'data': []
+        }
+
+    return {
+        'total': total_count,
+        'page': page,
+        'limit': limit,
+        'data': all_publications
+    }
+
+@revue_router.get("/", status_code=status.HTTP_200_OK)
+def get_all_revues(
+    session: SessionDep,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
+    """Get all journals with pagination"""
+    total_count = session.exec(select(func.count()).select_from(Revue)).one()
+    revues = session.exec(
+        select(Revue).offset((page - 1) * limit).limit(limit)
+    ).all()
+    
+    return {
+        'total': total_count,
+        'page': page,
+        'limit': limit,
+        'data': revues
+    }
+
 @revue_router.get("/{revue_id}", response_model=Revue)
 def get_revue_by_id(
+    session: SessionDep,
     revue_id: int = Path(..., description="ID de la revue"),
-    session: SessionDep = None,
 ):
     revue = session.get(Revue, revue_id)
     if not revue:
@@ -62,7 +143,7 @@ def add_revue(revue : RevueBase,session:SessionDep):
 
 
 @revue_router.patch('/{revue_id}',response_model=Revue,status_code=status.HTTP_200_OK)
-def patch_revue(revue_update : RevueUpdate,session: SessionDep,revue_id: int = Path(...)):
+def patch_revue(session:SessionDep, revue_update : RevueUpdate, revue_id: int = Path(...)):
     revue = session.get(Revue,revue_id)
     if not revue:
         raise HTTPException(detail="Revue n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -108,7 +189,7 @@ def add_revue_ranking(ranking:RevueRankingCreate,session:SessionDep):
     
 
 @revue_router.patch('/ranking/{revue_id}/{annee}',response_model=RevueRanking,status_code=status.HTTP_200_OK)
-def patch_ranking(revue:RevueRankingUpdate,session:SessionDep,revue_id : int = Path(...),annee : int = Path(...)):
+def patch_ranking(session:SessionDep, revue:RevueRankingUpdate, revue_id : int = Path(...), annee : int = Path(...)):
     
     result = session.get(RevueRanking,(revue_id,annee))
     if not result:
@@ -130,10 +211,29 @@ def delete_revue_ranking(session : SessionDep,revue_id : int = Path(...),annee :
     session.commit()
 
 
+@conference_router.get("/", status_code=status.HTTP_200_OK)
+def get_all_conferences(
+    session: SessionDep,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
+    """Get all conferences with pagination"""
+    total_count = session.exec(select(func.count()).select_from(Conference)).one()
+    conferences = session.exec(
+        select(Conference).offset((page - 1) * limit).limit(limit)
+    ).all()
+    
+    return {
+        'total': total_count,
+        'page': page,
+        'limit': limit,
+        'data': conferences
+    }
+
 @conference_router.get("/{conference_id}", response_model=Conference)
 def get_conference_by_id(
+    session: SessionDep,
     conference_id: int = Path(..., description="ID de la conférence"),
-    session: SessionDep = None,
 ):
     conference = session.get(Conference, conference_id)
     if not conference:
@@ -164,7 +264,7 @@ def add_conference(conference : ConferenceBase,session:SessionDep):
     return result
     
 @conference_router.patch('/{conference_id}')
-def patch_conference(conference : ConferenceUpdate,session : SessionDep,conference_id : int = Path(...)):
+def patch_conference(session : SessionDep, conference : ConferenceUpdate, conference_id : int = Path(...)):
     result = session.get(Conference,conference_id)
     if not result:
         raise HTTPException(detail="Conference n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -213,7 +313,7 @@ def add_conference_ranking(ranking:ConferenceRankingCreate,session:SessionDep):
 
 
 @conference_router.patch('/ranking/{conference_id}/{annee}',response_model=ConferenceRanking,status_code=status.HTTP_200_OK)
-def patch_conference_ranking(ranking:ConferenceRankingUpdate,session:SessionDep,conference_id : int = Path(...),annee : int = Path(...)):
+def patch_conference_ranking(session:SessionDep, ranking:ConferenceRankingUpdate, conference_id : int = Path(...), annee : int = Path(...)):
     result = session.get(ConferenceRanking,(conference_id,annee))
     if not result:
         raise HTTPException(detail="Le ranking de cette conference dans cette année n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -240,7 +340,7 @@ def delete_conference_ranking(session : SessionDep, conference_id : int = Path(.
 
 
 @publications_router.post('/revue',status_code=status.HTTP_201_CREATED)
-def add_publication_revue(session:SessionDep,publication_revue : PublicationRevueCreate,chercheur_id : int = Query(...,description='ID du chercheur')):
+def add_publication_revue(session:SessionDep, publication_revue : PublicationRevueCreate, chercheur_id : int = Query(...,description='ID du chercheur')):
     result = None
     normalized_name = None
 
@@ -286,7 +386,7 @@ def add_publication_revue(session:SessionDep,publication_revue : PublicationRevu
 
 
 @publications_router.patch('/revue/{publication_id}',response_model=PublicationRevue,status_code=status.HTTP_200_OK)
-def patch_publication_revue(publication:PublicationRevueUpdate,session:SessionDep,publication_id : int = Path(...)):
+def patch_publication_revue(session:SessionDep, publication:PublicationRevueUpdate, publication_id : int = Path(...)):
     result = session.get(PublicationRevue,publication_id)
     if not result:
         raise HTTPException(detail="La publication n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -315,6 +415,25 @@ def delete_publication(session: SessionDep, publication_id: int = Path(...)):
 
     session.delete(result)
     session.commit()
+
+
+@publications_router.get("/{publication_id}", status_code=status.HTTP_200_OK)
+def get_publication_by_id(publication_id: int, session: SessionDep):
+    """
+    Get a publication by ID (works for both revue and conference)
+    """
+    # Try to find in revue publications first
+    publication = session.get(PublicationRevue, publication_id)
+    if publication:
+        return publication
+    
+    # Try to find in conference publications
+    publication = session.get(PublicationConference, publication_id)
+    if publication:
+        return publication
+    
+    # Not found in either
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publication not found")
 
 
 @publications_router.get(
@@ -424,7 +543,7 @@ def get_revue_publications(
     annee_publication: int | None = Query(None, description="Filtrer par année"),
     is_open_access: bool | None = Query(None, description="Filtrer par accès ouvert"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=10)
+    limit: int = Query(10, ge=1, le=100)
 ):
    
     
@@ -463,14 +582,14 @@ def get_conference_publications(
     annee_publication: int | None = Query(None, description="Filtrer par année"),
     is_open_access: bool | None = Query(None, description="Filtrer par accès ouvert"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=10)
+    limit: int = Query(10, ge=1, le=100)
 ):
    
     
     offset = (page - 1) * limit
 
     # --------------------------
-    # Publications de revue
+    # Publications de conference
     # --------------------------
     
     query = select(PublicationConference)
@@ -497,7 +616,7 @@ def get_conference_publications(
 
 
 @publications_router.post('/conference',status_code=status.HTTP_201_CREATED)
-def add_publication_conference(session:SessionDep,publication_conference : PublicationConferenceCreate,chercheur_id : int = Query(...,description='ID du chercheur')):
+def add_publication_conference(session:SessionDep, publication_conference : PublicationConferenceCreate, chercheur_id : int = Query(...,description='ID du chercheur')):
     result = None
     normalized_name = None
 
@@ -541,7 +660,7 @@ def add_publication_conference(session:SessionDep,publication_conference : Publi
 
 
 @publications_router.patch('/conference/{publication_id}',response_model=PublicationConference,status_code=status.HTTP_200_OK)
-def patch_publication_revue(publication:PublicationConferenceUpdate,session:SessionDep,publication_id : int = Path(...)):
+def patch_publication_conference(session:SessionDep, publication:PublicationConferenceUpdate, publication_id : int = Path(...)):
     result = session.get(PublicationConference,publication_id)
     if not result:
         raise HTTPException(detail="La publication n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -589,7 +708,7 @@ def add_link_revue(link:LienCreate,session:SessionDep):
 
 
 @publications_router.patch('/revue/link/{chercheur_id}/{publication_id}',response_model=LienChercheurRevue,status_code=status.HTTP_200_OK)
-def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Path(...),publication_id: int = Path(...)):
+def patch_link_revue(session:SessionDep, link:LienUpdate, chercheur_id : int = Path(...), publication_id: int = Path(...)):
     chercheur = session.get(Chercheur,chercheur_id)
     if not chercheur:
         raise HTTPException(detail="Chercheur n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)
@@ -626,7 +745,7 @@ def add_link_revue(link:LienCreate,session:SessionDep):
 
 
 @publications_router.patch('/conference/link/{chercheur_id}/{publication_id}',response_model=LienChercheurConference,status_code=status.HTTP_200_OK)
-def patch_link_revue(link:LienUpdate,session:SessionDep,chercheur_id : int = Path(...),publication_id: int = Path(...)):
+def patch_link_conference(session:SessionDep, link:LienUpdate, chercheur_id : int = Path(...), publication_id: int = Path(...)):
     chercheur = session.get(Chercheur,chercheur_id)
     if not chercheur:
         raise HTTPException(detail="Chercheur n'existe pas.",status_code=status.HTTP_404_NOT_FOUND)

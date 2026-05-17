@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { MOCK_STATS } from '../constants';
+import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { Filter } from 'lucide-react';
+import { Filter, Loader } from 'lucide-react';
+import { StatisticsApi } from '../api/StatisticsApi';
 
 const COLORS = {
   blue: '#3b82f6',
@@ -15,25 +15,54 @@ const COLORS = {
 
 const StatsDashboard = () => {
   const [labFilter, setLabFilter] = useState('All Laboratories');
-  const data = MOCK_STATS;
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const stats = await StatisticsApi.getGlobalStatistics();
+        setData(stats);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load statistics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader className="animate-spin text-blue-500" size={40} />
+      </div>
+    );
+  }
+
+  if (error) return <div className="text-red-500">Error: {error}</div>;
+  if (!data) return <div className="text-white">No data available</div>;
 
   // Prepare Data for Pie Chart
   const pieData = [
-    { name: 'Revues', value: data.overview.publications_by_type.Revues },
-    { name: 'Conferences', value: data.overview.publications_by_type.Conferences },
+    { name: 'Revues', value: data.overview?.publications_by_type?.revue || 0 },
+    { name: 'Conferences', value: data.overview?.publications_by_type?.conference || 0 },
   ];
   
   const totalPubs = pieData.reduce((acc, curr) => acc + curr.value, 0);
 
   // Prepare Data for Bar Chart (Rankings)
-  // We need to transform the distributions into a unified array for the BarChart
-  // or render three separate small charts. The screenshot implies a unified view or 
-  // grouped view. Let's create a visual representation of all of them.
-  
-  const scimagoData = Object.entries(data.overview.rankings.scimago_distribution).map(([key, value]) => ({ name: key, value, fill: COLORS.purple }));
-  const dgrsdtData = Object.entries(data.overview.rankings.dgrsdt_distribution).map(([key, value]) => ({ name: key, value, fill: COLORS.pink }));
-  const coreData = Object.entries(data.overview.rankings.core_distribution).map(([key, value]) => ({ name: key, value, fill: COLORS.green }));
+  const scimagoData = Object.entries(data.overview?.rankings?.scimago_distribution || {}).map(([key, value]: [string, any]) => ({ name: key, value, fill: COLORS.purple }));
+  const dgrsdtData = Object.entries(data.overview?.rankings?.dgrsdt_distribution || {}).map(([key, value]: [string, any]) => ({ name: key, value, fill: COLORS.pink }));
+  const coreData = Object.entries(data.overview?.rankings?.core_distribution || {}).map(([key, value]: [string, any]) => ({ name: key, value, fill: COLORS.green }));
 
+  // Calculate open access ratio
+  const openAccessCount = data.overview?.open_access?.open_access_count || 0;
+  const totalPublications = data.overview?.total_publications || 1;
+  const openAccessRatio = Math.round((openAccessCount / totalPublications) * 100);
 
   return (
     <div className="space-y-6">
@@ -55,14 +84,14 @@ const StatsDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
           <h3 className="text-slate-400 font-medium mb-2">Total Publications</h3>
-          <p className="text-5xl font-bold text-white">{data.overview.total_publications}</p>
+          <p className="text-5xl font-bold text-white">{data.overview?.total_publications || 0}</p>
         </div>
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
           <h3 className="text-slate-400 font-medium mb-2">Total Researchers</h3>
-          <p className="text-5xl font-bold text-white mb-2">{data.researchers.total}</p>
+          <p className="text-5xl font-bold text-white mb-2">{data.researchers?.total || 0}</p>
           <div className="flex gap-4 text-sm">
-             <span className="text-slate-400">With Lab: <b className="text-slate-200">{data.researchers.with_lab}</b></span>
-             <span className="text-slate-400">Without Lab: <b className="text-slate-200">{data.researchers.without_lab}</b></span>
+             <span className="text-slate-400">With Lab: <b className="text-slate-200">{data.researchers?.with_lab || 0}</b></span>
+             <span className="text-slate-400">Without Lab: <b className="text-slate-200">{data.researchers?.without_lab || 0}</b></span>
           </div>
         </div>
       </div>
@@ -73,18 +102,18 @@ const StatsDashboard = () => {
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-center">
           <h3 className="text-lg font-semibold text-white mb-6">Open Access</h3>
           <div className="flex items-end gap-3 mb-2">
-            <span className="text-4xl font-bold text-white">{data.overview.open_access.count}</span>
+            <span className="text-4xl font-bold text-white">{openAccessCount}</span>
             <span className="text-slate-400 mb-1">count</span>
           </div>
           
           <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden mb-1 relative">
             <div 
                 className="bg-blue-600 h-full rounded-full" 
-                style={{ width: `${(data.overview.open_access.count / data.overview.total_publications) * 100}%` }}
+                style={{ width: `${(openAccessCount / totalPublications) * 100}%` }}
             ></div>
           </div>
           <div className="flex justify-end">
-             <span className="text-white font-bold">{Math.round((data.overview.open_access.count / data.overview.total_publications) * 100)}%</span>
+             <span className="text-white font-bold">{openAccessRatio}%</span>
           </div>
         </div>
 
@@ -110,18 +139,17 @@ const StatsDashboard = () => {
                     </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
-                     <span className="text-3xl font-bold text-white">0.5%</span>
-                     {/* The text inside the donut in the screenshot is illustrative, I'm putting 0.5 as placeholder or calculated */}
+                     <span className="text-3xl font-bold text-white">{totalPubs > 0 ? ((pieData[0].value / totalPubs) * 100).toFixed(1) : '0'}%</span>
                 </div>
             </div>
             <div className="ml-8 space-y-3">
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blue }}></div>
-                    <span className="text-slate-200">Revues: <span className="font-bold">{data.overview.publications_by_type.Revues}</span></span>
+                    <span className="text-slate-200">Revues: <span className="font-bold">{data.overview?.publications_by_type?.revue || 0}</span></span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slateDark }}></div>
-                    <span className="text-slate-200">Conferences: <span className="font-bold">{data.overview.publications_by_type.Conferences}</span></span>
+                    <span className="text-slate-200">Conferences: <span className="font-bold">{data.overview?.publications_by_type?.conference || 0}</span></span>
                 </div>
             </div>
           </div>
